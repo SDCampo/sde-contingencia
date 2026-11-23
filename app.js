@@ -1,7 +1,7 @@
 'use strict';
 /* SDE Contingência — registro offline de visitas quando o SDE Saúde no Campo está fora do ar.
    Os dados ficam só no aparelho (IndexedDB) e saem por exportação (ZIP com JSON, CSV e fotos). */
-const VERSAO = '1.0.0';
+const VERSAO = '1.1.0';
 
 /* ============ utilidades ============ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -33,7 +33,7 @@ function idade(nasc) {
   if (h.getMonth() < n.getMonth() || (h.getMonth() === n.getMonth() && h.getDate() < n.getDate())) i--;
   return i >= 0 && i < 130 ? i : null;
 }
-const vazio = (v) => v == null || v === '' || (Array.isArray(v) && !v.length);
+const vazio = (v) => v == null || v === '' || (Array.isArray(v) && !v.some((x) => x != null && String(x).trim() !== ''));
 const seguro = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('ver'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('ver'), ms); }
 function carregando(msg) { $('#cargaMsg').textContent = msg || 'Aguarde…'; $('#carga').hidden = false; }
@@ -97,14 +97,71 @@ const UFS = 'AC AL AM AP BA CE DF ES GO MA MG MS MT PA PB PE PI PR RJ RN RO RR R
 const AGUA = ['Rede pública', 'Poço artesiano', 'Poço raso / cacimba', 'Nascente / mina', 'Rio, córrego ou açude', 'Cisterna (água de chuva)', 'Carro-pipa', 'Outra'];
 const LIXO = ['Coleta pública', 'Levado pelo morador até a coleta', 'Queimado na propriedade', 'Enterrado', 'Jogado a céu aberto', 'Reciclagem / compostagem', 'Outro'];
 const RISCOS = ['Agrotóxicos', 'Máquinas e implementos', 'Animais (coices, mordidas)', 'Animais peçonhentos', 'Exposição ao sol', 'Esforço físico / carregar peso', 'Ruído', 'Poeira', 'Ferramentas cortantes', 'Trabalho em altura', 'Outros'];
-const TEMPO = ['Menos de 6 meses', '6 meses a 1 ano', '1 a 2 anos', 'Mais de 2 anos', 'Nunca', 'Não lembra'];
-const CONDICOES = ['Hipertensão (pressão alta)', 'Diabetes tipo 1', 'Diabetes tipo 2', 'Colesterol / triglicerídeos altos', 'Obesidade',
-  'Asma', 'DPOC / bronquite crônica', 'Alergias respiratórias / rinite', 'Angina / infarto prévio', 'Arritmia', 'Insuficiência cardíaca',
-  'AVC / AIT (derrame)', 'Doença renal crônica', 'Hipotireoidismo', 'Hipertireoidismo', 'Câncer (especificar em outras)', 'Câncer de pele',
-  'Lesões ou pintas suspeitas na pele', 'Depressão', 'Ansiedade', 'Outro transtorno mental', 'Alzheimer / demência', 'Epilepsia',
-  'Artrite reumatoide', 'Artrose', 'Dor crônica na coluna', 'LER/DORT, bursite, tendinite', 'Osteoporose', 'Anemia', 'Hepatite',
-  'HIV', 'Tuberculose', 'Doença de Chagas', 'Hanseníase', 'Intoxicação por agrotóxico (histórico)', 'Deficiência física',
-  'Deficiência auditiva', 'Deficiência visual', 'Deficiência intelectual'];
+/* Listas do Perfil de Saúde e do Atendimento: textos copiados do SDE (vídeo de 23/11/2026 e configuração lida em 13/11/2026). */
+const SN = ['Sim', 'Não'];
+const IMP = 'Pessoa impossibilitada de responder (por idade ou condição de saúde)';
+const FREQ = ['Diariamente/Sempre', 'Frequentemente (3–6 vezes/semana)', 'Ocasionalmente (1–2 vezes/semana)', 'Raramente (< 1 vez/semana)', 'Nunca', IMP];
+const FREQ_D = ['Diariamente', ...FREQ.slice(1)];
+const ESCALA = ['Sempre', 'Frequentemente', 'Ocasionalmente', 'Raramente', 'Nunca', IMP];
+const CONSULTA = ['Até 1 ano', 'Entre 1 e 2 anos', 'Entre 2 e 3 anos', 'Mais de 3 anos', 'Nunca', 'Não sei'];
+const HA_TEMPO = ['Menos de 6 meses', 'Entre 6 meses e 1 ano', 'Entre 1 e 5 anos', 'Entre 6 e 10 anos', 'Mais de 10 anos', 'Não sabe informar'];
+const DIAGNOSTICO = ['Entre 6 meses e 1 ano', 'Entre 1 e 5 anos', 'Entre 6 e 10 anos', 'Mais de 10 anos', 'Não sabe informar'];
+const MOTIVO_NAO = ['Recusa ou decisão do assistido', 'Condição clínica que impossibilita o procedimento', 'Falha, falta ou demais problemas relacionados à material e/ou equipamento'];
+const VACINAS = ['Sim', 'Parcialmente atualizadas / Atrasadas', 'Nenhuma dose registrada ou informada', 'Não sabe informar'];
+const CARTAO = ['Sim', 'Não encontrou o cartão de vacina', 'Recusou apresentar o cartão de vacina', 'Não possui cartão de vacina'];
+const FAMILIARES = ['Filho', 'Pai', 'Mãe', 'Irmãos', 'Avô(ó) - materna', 'Avô(ó) - paterno', 'Tio(a) - materna', 'Tio(a) - paterno'];
+const ANOS_FUMO = ['Menos de 1 ano', 'Entre 1 e 5 anos', 'Mais de 5 anos', 'Mais de 10 anos', 'Mais de 20 anos', 'Mais de 30 anos', 'Mais de 40 anos', 'Mais de 50 anos'];
+const ESC10 = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+const SEM_TRABALHO = ['Aposentado/Pensionista', 'Desempregado', 'Estudante', 'Afastado por doença', 'Não trabalha'];
+const OCUPACOES = [
+  'Agricultura, Pecuária e Atividades Rurais (Agricultor, Produtor(a) rural, Trabalhador(a) agrícola, Pecuarista, etc)',
+  'Serviços Gerais (Auxiliar de serviços gerais, Faxineiro, Zelador, Cozinheiro, Lavador, Porteiro, etc.)',
+  'Construção Civil (Pedreiro, Servente de obras, Eletricista, Pintor, etc)',
+  'Comércio e Atendimento (Vendedor, Atendente, Comerciário, etc.)',
+  'Saúde (ACS, Técnico de enfermagem, Enfermeiro, Médico, etc)',
+  'Educação (Professor, Monitor escolar, etc.)',
+  'Indústria e Produção (Operador de máquina, Metalúrgico, Mecânico, etc.)',
+  'Transporte e Logística (Motorista, Entregador, Caminhoneiro, etc.)',
+  'Administrativas (Assistente administrativo, Secretário, Recepcionista, etc.)',
+  'Segurança (Vigia, Policial, Bombeiro, etc.)',
+  'Serviços Domésticos e Cuidados (Empregado(a) doméstico(a), diarista, Cuidador de idosos, Babá, etc.)'];
+const RISCOS_TRAB = ['Não foram identificados riscos', 'Aplicação de produtos químicos/defensivo agrícola/venenos para controle de parasitas', 'Exposição à Luz Solar Intensa',
+  'Ataques de animais peçonhentos', 'Acidentes com animais, como coices, mordidas e cabeçada', 'Acidentes com ferramentas e máquinas',
+  'Exposição a agentes causadores de doenças respiratórias, como ácaros, pólens, pós', 'Rotina repetitiva sem pausa ao executar determinadas tarefas', 'Carregamento de Peso',
+  'Exposição a ruídos altos', 'Exposição a agentes infecciosos/parasitários', 'Exposição frequente à vibração', 'Outro'];
+const CONDICOES = [
+  'Acidente Isquêmico Transitório (AIT)', 'Acidente vascular encefálico (AVE)/Derrame/AVC', 'Adenomiose', 'Alergias respiratórias', 'Alopecia', 'Alzheimer', 'Anemia (outras)',
+  'Anemia falciforme', 'Aneurisma', 'Angina', 'Anorexia', 'Ansiedade', 'Apneia do sono', 'Arritmia', 'Artrite', 'Artrite reumatoide', 'Asma', 'Ataxia de Friedreich',
+  'Atrofia muscular espinhal', 'Bronquite crônica', 'Bursites', 'Câncer cerebral', 'Câncer de boca', 'Câncer de brônquios', 'Câncer de cólon e reto', 'Câncer de esôfago',
+  'Câncer de estômago', 'Câncer de fígado', 'Câncer de intestino', 'Câncer de laringe', 'Câncer de mama', 'Câncer de ovário', 'Câncer de pâncreas', 'Câncer de pele',
+  'Câncer de pênis', 'Câncer de próstata', 'Câncer de pulmão', 'Câncer de rim', 'Câncer de testículo', 'Câncer de tireoide', 'Câncer de traqueia', 'Câncer do colo de útero',
+  'Chikungunya', 'Clamídia', 'Colite ulcerativa', 'Depressão', 'Diabetes', 'Dislipidemias', 'Doença de Addison', 'Doença de Behçet', 'Doença de Chagas', 'Doença de Crohn',
+  'Doença do refluxo gastroesofágico (DRGE)', 'Doença hepática alcoólica', 'Doenças do fígado', 'DORT (Distúrbios osteomusculares relacionados ao trabalho)',
+  'DPOC (Doença pulmonar obstrutiva crônica)', 'Endometriose', 'Enfisema', 'Epilepsia', 'Esclerodermia', 'Esclerose lateral amiotrófica (ELA)', 'Esclerose múltipla',
+  'Escoliose', 'Espondilite anquilosante', 'Esquistossomose', 'Esquizofrenia', 'Esteatose hepática', 'Fibromialgia', 'Fibrose cística', 'Gastrite', 'Gonorreia', 'Gota',
+  'Hanseníase', 'Hemofilia', 'Hepatites virais', 'Hérnia de disco', 'Herpes genital', 'Hipertensão arterial sistêmica', 'Hipertireoidismo', 'Hipotireoidismo', 'HIV', 'HPV',
+  'Infarto', 'Insuficiência cardíaca', 'Insuficiência renal/Diálise', 'Insuficiência venosa crônica', 'Leishmaniose visceral', 'LER (Lesão por esforço repetitivo)',
+  'Leucemias', 'Linfoma de Hodgkin', 'Linfoma não-Hodgkin', 'Lúpus', 'Mieloma Múltiplo', 'Neuropatias', 'Obesidade', 'Osteoartrite', 'Osteoporose', 'Parkinson', 'Sífilis',
+  'Síndrome de Down', 'Síndrome de Guillain-Barré', 'Síndrome de Sjögren', 'Síndrome de Turner', 'Síndrome pós-pólio', 'Talassemia', 'TDAH (Transtorno do déficit de atenção e hiperatividade)',
+  'Tendinites', 'Tireoidite de Hashimoto', 'Toxoplasmose', 'Transtorno bipolar', 'Transtorno do Espectro Autista (TEA)', 'Tricomoníase', 'Tuberculose', 'Valvulopatia', 'Zika congênita'];
+const CIRURGIAS = ['Cesárea (parto cesáreo) — cirurgia obstétrica bastante frequente no país.',
+  'Hernioplastia / correção de hérnia abdominal ou inguinal — reparo de hérnias da parede abdominal', 'Colecistectomia (remoção da vesícula biliar) — para tratamento de cálculos biliares',
+  'Apendicectomia (retirada do apêndice)', 'Cirurgia de catarata', 'Sutura / tratamento de feridas', 'Histerectomia (retirada do útero)', 'Cirurgia ortopédica / tratamento de fraturas',
+  'Cirurgias abdominais gerais', 'Cirurgia bariátrica', 'Ressecção de tumor', 'Transplante'];
+const TEMAS = [['SaudeAmbiente', 'Saúde do ambiente'], ['AlimentacaoSaudavel', 'Alimentação saudável'], ['AtividadeFisica', 'Atividade física/Estímulo cognitivo'],
+  ['Cidadania', 'Cidadania'], ['Alcool', 'Cuidado relacionado ao uso de álcool'], ['Drogas', 'Cuidado relacionado ao uso de drogas'], ['CulturaLazer', 'Cultura e lazer'],
+  ['EducacaoTrabalho', 'Educação e trabalho'], ['GestaoTempoRotina', 'Gestão do Tempo e Rotina'], ['HigienePessoal', 'Higiene pessoal'], ['MedicacaoSegura', 'Medicação segura'],
+  ['PrevencaoQueda', 'Prevenção de queda'], ['SaudeAuditiva', 'Saúde auditiva'], ['SaudeBucal', 'Saúde bucal'], ['SaudeComplEnc', 'Saúde complementar / Encaminhamento'],
+  ['SaudePele', 'Saúde da pele'], ['SaudeCuidador', 'Saúde do cuidador'], ['SaudeSono', 'Saúde do sono'], ['SaudeTrabalhador', 'Saúde do trabalhador'],
+  ['SaudeFinanceira', 'Saúde Financeira Básica'], ['SaudeMental', 'Saúde Mental'], ['SaudeOcular', 'Saúde ocular'], ['SaudeSexualReprodutiva', 'Saúde sexual e reprodutiva'],
+  ['Vacinacao', 'Vacinação'], ['CessacaoTabagismo', 'Cessação do tabagismo']];
+const ALERTAS_IC = {
+  'Alerta 1': 'Perfil identificado: motivado, porém inseguro. O assistido quer mudar, mas não se sente capaz. Foque em apoio prático, metas pequenas e acompanhamento nas próximas visitas.',
+  'Alerta 2': 'Perfil identificado: capaz, porém desengajado. O assistido tem capacidade, mas pouco interesse. Trabalhe conscientização, impacto da saúde no trabalho e benefícios a médio prazo.',
+  'Alerta 3': 'Perfil identificado: baixa prontidão para o autocuidado. Priorize vínculo, escuta qualificada e orientações básicas. Evite sobrecarregar com muitas recomendações.' };
+/* Nome interno a partir do texto da opção (ex.: "Câncer de fígado" → CancerFigado), no padrão cab_1PergCancerFigado do SDE. */
+const codigo = (s) => String(s).split(' — ')[0].replace(/\([^)]*\)/g, ' ').normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^A-Za-z0-9]+/)
+  .filter((w) => w && !['de', 'do', 'da', 'dos', 'das', 'e', 'a', 'o'].includes(w.toLowerCase())).map((w) => w[0].toUpperCase() + w.slice(1)).join('');
 const SIM_NAO_NS = ['Sim', 'Não', 'Não sabe'];
 
 const idadeDe = (o) => idade(o.cab_DataNascimento);
@@ -114,11 +171,351 @@ function imc(o) {
   if (!p || !a) return '';
   if (a > 3) a /= 100;
   const v = p / (a * a);
-  if (!isFinite(v) || v < 8 || v > 90) return 'Confira peso e altura';
-  const i = idadeDe(o);
-  const cls = i != null && i < 20 ? 'abaixo de 20 anos: avaliar pela curva de crescimento' : v < 18.5 ? 'baixo peso' : v < 25 ? 'adequado' : v < 30 ? 'sobrepeso' : 'obesidade';
-  return `${v.toFixed(1).replace('.', ',')} — ${cls}`;
+  return isFinite(v) ? v.toFixed(2).replace('.', ',') : '';
 }
+/* condições de exibição */
+const ge = (n) => (o) => { const i = idadeDe(o); return i == null || i >= n; };
+const eq = (k, ...v) => (o) => v.includes(o[k]);
+const tem = (k, v) => (o) => Array.isArray(o[k]) && o[k].includes(v);
+const todos = (...fs) => (o) => fs.every((f) => f(o));
+function linhaCuidado(o) {
+  const i = idadeDe(o); if (i == null) return '';
+  return i < 10 ? 'Criança' : i < 20 ? 'Adolescente' : i < 60 ? (mulher(o) ? 'Mulher' : 'Homem') : 'Idoso';
+}
+const lc = (x) => (o) => linhaCuidado(o) === x;
+function alertaIC(i, c) {
+  if (vazio(i) || vazio(c)) return '';
+  i = +i; c = +c;
+  return i >= 7 && c <= 6 ? 'Alerta 1' : i <= 6 && c >= 7 ? 'Alerta 2' : i <= 6 && c <= 6 ? 'Alerta 3' : '';
+}
+const notaLivre = (l, se) => ({ t: 'info', calc: () => l, se });
+
+/* ---------- Perfil de Saúde (formulário 1008, "Antecedentes") ---------- */
+const fum = todos(ge(18), eq('cab_Fumante', 'Fumante'));
+const alc = todos(ge(18), eq('cab_UsoBebidaAlcoolica', ...FREQ_D.slice(0, 3)));
+const drog = todos(ge(18), eq('cab_UtilizaDrogas', ...FREQ_D.slice(0, 3)));
+const acam = eq('cab_EncontraseAcamada', 'Sim, em caráter permanente', 'Sim, em caráter temporário');
+const mensurar = (nome, rotulo, campos, se) => [
+  { k: 'cab_Mensurar' + nome, l: `Mensurar ${rotulo}?`, t: 'rad', o: SN, req: true, linha: true, se },
+  { k: 'cab_MotivoNaoMensurar' + nome, l: 'Motivo', t: 'rad', o: MOTIVO_NAO, se: todos(se || (() => true), eq('cab_Mensurar' + nome, 'Não')) },
+  { k: 'cab_JustificativaNaoMensurar' + nome, l: 'Justificativa', t: 'area', req: true, se: todos(se || (() => true), eq('cab_Mensurar' + nome, 'Não')) },
+  ...campos.map((c) => ({ t: 'num', dec: true, req: true, ...c, se: todos(se || (() => true), eq('cab_Mensurar' + nome, 'Sim')) })),
+];
+const vacinasLC = (cod, rotulo, se) => [
+  { k: 'cab_RecebeuVacinasLC' + cod, l: rotulo, t: 'rad', o: VACINAS, req: true, se },
+  { k: 'cab_CartaoVacinaApresentadoLC' + cod, l: 'O cartão de vacinação foi apresentado para conferência?', t: 'rad', o: CARTAO, req: true, se },
+];
+const PERFIL = [
+  { k: 'cab_DesejaPreencherPerfil', l: 'Deseja preencher o perfil de saúde?', t: 'rad', o: SN, req: true, linha: true, abre: true },
+  { t: 'titulo', l: 'Educação e trabalho' },
+  { k: 'cab_FrequentaEscolaCreche', l: 'Frequenta ou já frequentou alguma instituição de ensino básico e/ou superior', t: 'rad', o: SN, req: true, linha: true },
+  { k: 'cab_Escolaridade', l: 'Escolaridade', t: 'rad', req: true, se: eq('cab_FrequentaEscolaCreche', 'Sim'),
+    o: ['Não é alfabetizado', 'Creche', 'Pré-escola', 'Ensino fundamental incompleto', 'Ensino fundamental completo', 'Ensino médio incompleto', 'Ensino médio completo', 'Ensino superior incompleto', 'Ensino superior completo'] },
+  { k: 'cab_SabeLerEscrever', l: 'Sabe ler e escrever um bilhete simples?', t: 'rad', o: SN, req: true, linha: true, se: todos((o) => !vazio(o.cab_FrequentaEscolaCreche), ge(7)) },
+  { k: 'cab_SituacaoMercado', l: 'Situação atual no mercado de trabalho?', t: 'multi', req: true, se: todos((o) => !vazio(o.cab_FrequentaEscolaCreche), ge(14)),
+    o: ['Empregador/Produtor', 'Aposentado/Pensionista', 'Assalariado com carteira de trabalho', 'Assalariado sem carteira de trabalho', 'Autônomo com previdência social',
+      'Autônomo sem previdência social', 'Desempregado', 'Trabalho doméstico', 'Estudante', 'Afastado por doença', 'Não trabalha'] },
+  { k: 'cab_OcupacaoAtual', l: 'Qual sua ocupação atual?', t: 'multi', o: OCUPACOES, req: true, se: todos(ge(14), (o) => (o.cab_SituacaoMercado || []).some((x) => !SEM_TRABALHO.includes(x))) },
+  { k: 'cab_PrincipaisRiscosAssociadosTrabalhoDiario', l: 'Principais riscos associados ao trabalho diário:', t: 'multi', o: RISCOS_TRAB, req: true, se: (o) => !vazio(o.cab_OcupacaoAtual) },
+
+  { t: 'titulo', l: 'Autoavaliação – Estado emocional', se: ge(10) },
+  { k: 'cab_ComoConsidera', l: 'Como você se considera?', t: 'rad', req: true, se: ge(10),
+    o: ['Uma pessoa feliz', 'Uma pessoa triste', 'Uma pessoa ansiosa', 'Uma pessoa estressada/irritada', 'Uma pessoa calma', 'Uma pessoa desanimada', 'Uma pessoa bem-disposta', 'Pessoa impossibilitada'] },
+  { k: 'cab_FrequenciaPrazerAtividades', l: 'Com que frequência você sente prazer nas atividades do dia a dia?', t: 'rad', o: FREQ, req: true, se: ge(10) },
+  { k: 'cab_SatisfacaoGeralVida', l: 'Como você avalia sua satisfação geral com a vida atualmente?', t: 'rad', se: ge(10),
+    o: ['Muito satisfeito(a)', 'Satisfeito(a)', 'Indiferente', 'Pouco satisfeito(a)', 'Insatisfeito(a)', IMP] },
+  { t: 'titulo', l: 'Autoavaliação – Sono', se: ge(10) },
+  { k: 'cab_ConsideraDormiuBem', l: 'Você considera que dorme bem?', t: 'rad', o: FREQ, se: ge(10) },
+  { k: 'cab_HorasSono', l: 'Quantas horas costuma dormir por noite?', t: 'rad', se: todos(ge(10), eq('cab_ConsideraDormiuBem', ...FREQ.slice(2, 5))),
+    o: ['Menos de 3 horas', '3 a 4 horas', '5 a 6 horas', '7 a 8 horas', 'Mais de 8 horas', 'Sono irregular', IMP] },
+  { t: 'titulo', l: 'Autoavaliação – Higiene', se: ge(10) },
+  { k: 'cab_FrequenciaHigieneCorporalCapilar', l: 'Com que frequência realiza higiene corporal e capilar?', t: 'rad', o: FREQ, se: ge(10) },
+  { k: 'cab_FrequenciaHigieneBucal', l: 'Com que frequência realiza higiene bucal (escovação de dentes com escova individual, escovação da língua e uso de fio dental)?', t: 'rad', o: FREQ, se: ge(10) },
+  { t: 'titulo', l: 'Autoavaliação – Alimentação e Bem-estar', se: ge(10) },
+  { k: 'cab_AvaliaAlimentacao', l: 'Como você avalia sua alimentação?', t: 'rad', req: true, se: ge(10),
+    o: ['Muito saudável', 'Saudável', 'Parcialmente saudável', 'Pouco saudável', 'Nada saudável', IMP] },
+  { t: 'titulo', l: 'Autoavaliação – Organização e rotina', se: ge(10) },
+  { k: 'cab_AvaliaOrganizacao', l: 'Você se considera uma pessoa organizada?', t: 'rad', o: ESCALA, se: ge(10) },
+  { k: 'cab_EquilibraTrabalhoTarefasDescanso', l: 'Você consegue equilibrar trabalho, tarefas e descanso?', t: 'rad', o: ESCALA, se: ge(10) },
+  { t: 'titulo', l: 'Autoavaliação – Relações e comunicação', se: ge(10) },
+  { k: 'cab_UsaAparelhoAuditivo', l: 'O assistido usa aparelho auditivo?', t: 'rad', o: ['Sim', 'Não', IMP], req: true, se: ge(10) },
+  { k: 'cab_ConsideraSociavel', l: 'Você se considera uma pessoa sociável?', t: 'rad', o: ESCALA, req: true, se: ge(10) },
+  { k: 'cab_FacilidadeConversarExpressar', l: 'Você tem facilidade em conversar e expressar o que sente?', t: 'rad', o: ESCALA, req: true, se: ge(10) },
+  { t: 'titulo', l: 'Autoavaliação – Autoavaliação Geral da Saúde', se: ge(10) },
+  { k: 'cab_AvaliaEstadoSaude', l: 'De um modo geral, como você avalia o seu estado de saúde?', t: 'rad', o: ['Muito bom', 'Bom', 'Regular', 'Ruim', 'Muito ruim', IMP], req: true, se: ge(10) },
+  { k: 'cab_RelataQueixa', l: 'Relata queixa relacionada a algum dos itens abaixo?', t: 'multi', req: true, se: ge(10),
+    o: ['Visão (ex.: dificuldade para enxergar, visão embaçada)', 'Fala (ex.: dificuldade para falar ou se comunicar)', 'Audição (ex.: dificuldade para ouvir)',
+      'Movimento (ex.: dificuldade para andar, levantar ou movimentar partes do corpo)', 'Não apresenta queixas', IMP] },
+
+  { t: 'titulo', l: 'Hábitos de Vida - Atividade física', se: ge(14) },
+  { k: 'cab_PraticaAtividadeFisica', l: 'Pratica atividade física?', t: 'rad', o: FREQ, req: true, se: ge(14) },
+  { k: 'cab_QualAtividadeFisica', l: 'Qual?', t: 'multi', req: true, se: todos(ge(14), eq('cab_PraticaAtividadeFisica', ...FREQ.slice(0, 3))),
+    o: ['Caminhada', 'Musculação/Academia', 'Corrida', 'Dança (zumba/fitdance)', 'Futebol/Futsal', 'Vôlei', 'Natação', 'Pilates', 'Yoga', 'Atividades domésticas (faxina, lavagem, varrer quintal)', 'Outro'] },
+  { t: 'titulo', l: 'Hábitos de Vida - Tabagismo', se: ge(18) },
+  { k: 'cab_Fumante', l: 'É fumante?', t: 'rad', o: ['Nunca fumou', 'Ex-fumante', 'Fumante', IMP], req: true, se: ge(18) },
+  { k: 'cab_FumouQuantosAnos', l: 'Fumou por quantos anos?', t: 'rad', o: ANOS_FUMO, req: true, se: todos(ge(18), eq('cab_Fumante', 'Ex-fumante')) },
+  { k: 'cab_HaQuantoTempoParouFumar', l: 'Há quanto tempo parou de fumar?', t: 'rad', o: ['Menos de 1 ano', 'Entre 1 e 5 anos', 'Mais de 5 anos', 'Mais de 10 anos'], req: true, se: todos(ge(18), eq('cab_Fumante', 'Ex-fumante')) },
+  { k: 'cab_ExpostoFumaca', l: 'Fica exposto(a) à fumaça do cigarro?', t: 'rad', o: FREQ_D, req: true, se: todos(ge(18), eq('cab_Fumante', 'Nunca fumou', 'Ex-fumante')) },
+  { t: 'titulo', l: 'Protocolo - Tabagismo', se: fum },
+  { k: 'cab_TipoCigarroProtocoloTabagismo', l: 'Informe o tipo de cigarro/fumo:', t: 'multi', req: true, se: fum,
+    o: ['Cachimbo', 'Charutos ou Cigarrilhas', 'Cigarro Convencional (industrializado)', 'Cigarro de Palha ou Fumo de Corda', 'Cigarro Eletrônico (vape)', 'Narguilé', 'Tabaco aquecido', 'Tabaco triturado e enrolado manualmente'] },
+  { k: 'cab_QtdCigarrosDiaProtocoloTabagismo', l: 'Quantos cigarros fuma por dia?', t: 'rad', o: ['Menos de 10', 'De 11 a 20', 'De 21 a 30', 'Mais de 31'], req: true, se: fum },
+  { k: 'cab_FumaAmbienteFechadoProtocoloTabagismo', l: 'Fuma dentro de casa ou em ambientes fechados?', t: 'rad', o: SN, linha: true, req: true, se: fum },
+  { k: 'cab_PrentendeParaFumarProtocoloTabagismo', l: 'Tem intenção de parar de fumar?', t: 'rad', o: SN, linha: true, req: true, se: fum },
+  { k: 'cab_LesaoBucalProtocoloTabagismo', l: 'Identifica alguma lesão/ferida bucal?', t: 'rad', o: SN, linha: true, req: true, se: fum },
+  { k: 'cab_FumaHaQuantosAnosProtocoloTabagismo', l: 'Fuma há quantos anos?', t: 'rad', o: ANOS_FUMO, req: true, se: fum },
+  { t: 'titulo', l: 'Hábitos de Vida - Álcool', se: ge(18) },
+  { k: 'cab_UsoBebidaAlcoolica', l: 'Faz uso de bebida alcoólica?', t: 'rad', o: FREQ_D, req: true, se: ge(18) },
+  { t: 'titulo', l: 'Protocolo - Alcoolismo', se: alc },
+  notaLivre('As opções destas duas perguntas não foram capturadas do SDE: responda por extenso.', alc),
+  { k: 'cab_QuaisBebidasProtocoloAlcoolismo', l: 'Quais Bebibas?', t: 'text', req: true, se: alc },
+  { k: 'cab_BebeFrequenciaAnosProtocoloAlcoolismo', l: 'Bebe com esta frequência há quantos anos?', t: 'text', req: true, se: alc },
+  { k: 'cab_IntencaoParaReduzirFrequenciaQuantidadeProtocoloAlcoolismo', l: 'Tem intenção de parar de beber ou reduzir a frequência/quantidade?', t: 'rad', o: SN, linha: true, req: true, se: alc },
+  { t: 'titulo', l: 'Hábitos de Vida - Outras Drogas', se: ge(18) },
+  { k: 'cab_UtilizaDrogas', l: 'Faz uso de outras drogas?', t: 'rad', o: FREQ_D, se: ge(18) },
+  { t: 'titulo', l: 'Protocolo - Dependência química', se: drog },
+  { k: 'cab_QuaisDrogasProtocoloDependenciaQuimica', l: 'Quais drogas?', t: 'multi', req: true, se: drog,
+    o: ['Crack, Oxi, Merla', 'Ecstasy/MDMA', 'Heroína', 'Maconha, Haxixim Skank', 'Opióides', 'Quetamina', 'Solventes: Lança-perfume, loló', 'Não informou', 'Outro'] },
+  { k: 'cab_IntencaoParaReduzirFrequenciaQuantidadeProtocoloDependenciaQuimica', l: 'Tem intenção de parar de usar ou reduzir a frequência/quantidade?', t: 'rad', o: SN, linha: true, req: true, se: drog },
+
+  { t: 'titulo', l: 'Acesso, Saúde e Doença Acesso à saúde' },
+  { k: 'cab_PossuiPlanoSaude', l: 'Possui plano de saúde?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_UltimaConsultaComMedico', l: 'Quando foi sua última consulta com o médico?', t: 'rad', o: CONSULTA, req: true },
+  { k: 'cab_UltimaConsultaComDentista', l: 'Quando foi sua última consulta com o dentista?', t: 'rad', o: CONSULTA, req: true },
+  { k: 'cab_UsoProteseDentaria', l: 'Atualmente, você faz uso de prótese dentária?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_UltimaConsultaComOftalmologista', l: 'Quando foi sua última consulta com o oftalmologista?', t: 'rad', o: CONSULTA, req: true },
+  { k: 'cab_UsaOculosLentes', l: 'Usa óculos/lentes de contato?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_ProcuraAtendimentoSaude', l: 'Quando está doente ou precisando de atendimento de saúde costuma procurar', t: 'multi', req: true,
+    o: ['Centro de Atenção Psicossocial', 'Farmácia', 'Serviços de saúde da rede privada (hospital, consultório, clínica, etc.)', 'Teleconsulta', 'Unidade básica de saúde/Policlínica',
+      'Unidade de Pronto Atendimento (UPA)/Hospital Público', 'Informações na internet', 'Outro'] },
+  { k: 'cab_MeioTransporteServicosSaude', l: 'Meio de transporte mais utilizado para chegar à cidade/serviços de saúde', t: 'multi', req: true,
+    o: ['Veículo motorizado próprio (carro, moto, etc)', 'Bicicleta', 'Transporte coletivo', 'Caminhada', 'Carona'] },
+
+  { t: 'titulo', l: 'Acesso, Saúde e Doença Condição atual' },
+  ...mensurar('Peso', 'Peso', [{ k: 'cab_Peso', l: 'Peso', ph: 'kg' }]),
+  ...mensurar('Altura', 'Altura', [{ k: 'cab_Altura', l: 'Altura', ph: 'Informar altura em (cm)' }]),
+  { k: 'cab_IMC', l: 'IMC', t: 'calc', calc: imc, se: (o) => o.cab_MensurarPeso === 'Sim' && o.cab_MensurarAltura === 'Sim' },
+  ...mensurar('Pressao', 'Pressão', [{ k: 'cab_PressaoArterialSistolica', l: 'Sistólica', dec: false }, { k: 'cab_PressaoArterialDiastolica', l: 'Diastólica', dec: false }], ge(18)),
+  { k: 'cab_PossuiDeficiencia', l: 'Possui alguma deficiência?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_EspecificaDeficiencia', l: 'Especificar a deficiência:', t: 'multi', o: ['Física', 'Visual', 'Auditiva', 'Intelectual', 'Psicossocial'], req: true, se: eq('cab_PossuiDeficiencia', 'Sim') },
+  ...['Física', 'Visual', 'Auditiva', 'Intelectual', 'Psicossocial'].map((d) => ({ k: 'cab_DetalhamentoDeficiencia' + codigo(d), l: 'Detalhamento – Deficiência ' + d, t: 'area', req: true,
+    se: todos(eq('cab_PossuiDeficiencia', 'Sim'), tem('cab_EspecificaDeficiencia', d)) })),
+  { k: 'cab_EncontraseAcamada', l: 'A pessoa atendida encontra-se acamada no momento do atendimento?', t: 'rad', o: ['Sim, em caráter permanente', 'Sim, em caráter temporário', 'Não'], req: true },
+  { t: 'titulo', l: 'Protocolo - Cuidado da pessoa acamada', se: acam },
+  notaLivre('As opções deste protocolo não foram capturadas do SDE: responda por extenso quando não for Sim/Não.', acam),
+  { k: 'cab_TempoAcamadaProtocoloAcamado', l: 'Há quanto tempo está acamada?', t: 'text', req: true, se: acam },
+  { k: 'cab_NivelConscienciaProtocoloAcamado', l: 'Nível de consciência e orientação da pessoa acamada', t: 'text', req: true, se: acam },
+  { k: 'cab_RealizaAtividadeSozinhaProtocoloAcamado', l: 'A pessoa consegue realizar alguma atividade sozinha?', t: 'text', req: true, se: acam },
+  { k: 'cab_CuidadorPrincipalProtocoloAcamado', l: 'Existe um cuidador principal?', t: 'rad', o: SN, linha: true, req: true, se: acam },
+  { k: 'cab_QuemRealizaCuidadoProtocoloAcamado', l: 'Quem realiza o cuidado?', t: 'text', req: true, se: acam },
+  { k: 'cab_CuidadorOrientadoProtocoloAcamado', l: 'O cuidador recebeu orientações de profissionais de saúde sobre os cuidados?', t: 'rad', o: SN, linha: true, req: true, se: acam },
+  { k: 'cab_DetalhamentoProtocoloAcamado', l: 'Detalhamento', t: 'area', se: acam },
+
+  { t: 'titulo', l: 'Condições de Saúde' },
+  { k: 'cab_PossuiDoencaLongaDuracao', l: 'Possui alguma condição de saúde ou algum médico já deu o diagnóstico de alguma doença crônica, física ou mental, ou doença de longa duração (de mais de 6 meses de duração)?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_SelecionaCondicao', l: 'Condições de Saúde', t: 'multi', o: CONDICOES, busca: true, req: true, se: eq('cab_PossuiDoencaLongaDuracao', 'Sim') },
+  { k: 'cab_LimitaAtividadesHabituais', l: 'Alguma dessas doenças limita, de alguma forma, suas atividades habituais (trabalhar, ir à escola, brincar, afazeres domésticos etc.)?', t: 'rad', o: SN, linha: true, req: true, se: eq('cab_PossuiDoencaLongaDuracao', 'Sim') },
+  { t: 'cada', k: '_condicoes', se: eq('cab_PossuiDoencaLongaDuracao', 'Sim'), itens: (o) => (o.cab_SelecionaCondicao || []).map((x) => ({ id: x, l: x })),
+    campos: (x) => { const c = codigo(x.id); const k = (n) => `cab_${n}Perg${c}`; const ativa = eq(k(2), 'Ativa'); return [
+      { k: k(1), l: 'Quando foi diagnosticado?', t: 'rad', o: DIAGNOSTICO, req: true },
+      { k: k(2), l: 'Situação da condição de saúde?', t: 'rad', o: ['Ativa', 'Curada', 'Desconhecida'], req: true, linha: true },
+      { k: k(3), l: 'Situação da condição ativa:', t: 'text', req: true, se: ativa },
+      { k: k(4), l: 'Quando foi a última avaliação pelo profissional de saúde referente à esta condição de saúde?', t: 'text', req: true, se: ativa },
+      { k: k(5), l: 'Motivo de desconhecer a evolução da condição:', t: 'text', req: true, se: eq(k(2), 'Desconhecida') },
+    ]; } },
+  { t: 'titulo', l: 'Protocolo - Diabetes', se: tem('cab_SelecionaCondicao', 'Diabetes') },
+  { k: 'cab_FrequenciaGlicemiaProtocoloDiabetes', l: 'Com que frequência sua glicemia é medida?', t: 'text', req: true, se: tem('cab_SelecionaCondicao', 'Diabetes') },
+  { k: 'cab_ValorGlicemiaProtocoloDiabetes', l: 'Sabe informar o valor habitual da sua glicemia?', t: 'text', req: true, se: tem('cab_SelecionaCondicao', 'Diabetes') },
+  { t: 'titulo', l: 'Protocolo - Hipertensão Arterial', se: tem('cab_SelecionaCondicao', 'Hipertensão arterial sistêmica') },
+  { k: 'cab_FrequenciaPressaoProtocoloHipertensao', l: 'Com que frequência sua pressão arterial é medida?', t: 'text', req: true, se: tem('cab_SelecionaCondicao', 'Hipertensão arterial sistêmica') },
+  { k: 'cab_ValoresPressaoProtocoloHipertensao', l: 'Sabe informar os valores habituais da sua pressão arterial?', t: 'text', req: true, se: tem('cab_SelecionaCondicao', 'Hipertensão arterial sistêmica') },
+
+  { t: 'titulo', l: 'Acesso, Saúde e Doença Terapias e tratamentos' },
+  { k: 'cab_AlergiaMedicamento', l: 'Tem alergia a algum medicamento?', t: 'rad', o: ['Sim', 'Não', 'Não sabe informar'], req: true },
+  { k: 'cab_NomeMedicamentoAlergia', l: 'Nome do medicamento que tem alergia', t: 'lista', req: true, se: eq('cab_AlergiaMedicamento', 'Sim') },
+  { k: 'cab_PergMedicacaoUsoContinua', l: 'Faz uso de medicação contínua?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_QtdMedicamentos', l: 'Seleciona o a sessão para incluir ou remover medicamentos', t: 'multi', req: true, se: eq('cab_PergMedicacaoUsoContinua', 'Sim'),
+    o: Array.from({ length: 10 }, (_, i) => 'Medicamento ' + (i + 1)) },
+  { t: 'cada', k: '_medicamentos', se: eq('cab_PergMedicacaoUsoContinua', 'Sim'), itens: (o) => (o.cab_QtdMedicamentos || []).map((x) => ({ id: x, l: x })),
+    campos: (x) => { const n = x.id.replace(/\D/g, ''); const k = (b) => b + n; const presc = eq(k('cab_3PergMedicacaoUsoContinua'), 'Sim'); return [
+      { k: k('cab_NomeMedicamento'), l: 'Nome do medicamento', t: 'text', req: true },
+      { k: k('cab_3PergMedicacaoUsoContinua'), l: 'A medicação foi prescrita por um profissional de saúde?', t: 'rad', o: SN, linha: true, req: true },
+      { k: k('cab_DoseMedicamento'), l: 'Dose do medicamento', t: 'text', req: true, se: presc },
+      { k: k('cab_FormaFarmaceutica'), l: 'Forma Farmacêutica do medicamento', t: 'rad', req: true, se: presc,
+        o: ['Sólida (cápsula, comprimido, pastilha, etc.)', 'Semissólida (pomada, gel, loção, etc.)', 'Líquida (solução, xarope, etc.)', 'Gasosa (spray, aerosol, etc.)'] },
+      { k: k('cab_ViaAdministracao'), l: 'Via de administração da medicação', t: 'rad', o: ['Oral', 'Tópica', 'Nasal', 'Injetável'], req: true, se: presc },
+      { k: k('cab_FrequenciaUsoMedicacao'), l: 'Frequência em que faz uso da medicação', t: 'rad', req: true, se: presc,
+        o: ['12 em 12 horas (2x ao dia)', '1x ao dia', '1x na semana', '1x no mês', '2 em 2 meses'] },
+      { k: k('cab_HorariosUsoMedicacao'), l: 'Horários de uso da medicação', t: 'area', req: true, se: presc },
+      { k: k('cab_UsoMedicacaoConformeOrientado'), l: 'Faz uso da medicação conforme orientado pelo profissional de saúde?', t: 'rad', req: true, se: presc,
+        o: ['Sempre', 'Frequentemente', 'Ocasionalmente', 'Raramente', 'Nunca'] },
+      { k: k('cab_TempoUsoMedicacao'), l: 'Há quanto tempo usa essa medicação (mesma medicação, mesma posologia)?', t: 'rad', req: true, se: presc,
+        o: ['Menos de 1 mês', 'De 1 a 3 meses', 'De 4 a 6 meses', 'De 7 meses a 1 ano', 'Mais de 1 ano', 'Mais de 2 anos', 'Não lembra / Não sabe informar'] },
+      { k: k('cab_ArmazenamentoAdequado'), l: 'Armazenamento adequado?', t: 'rad', o: SN, linha: true, req: true, se: presc },
+    ]; } },
+  { t: 'titulo', l: 'Plantas Medicinais' },
+  { k: 'cab_UsoPlantasMedicinais', l: 'Faz uso de plantas medicinais?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_QualPlantaMedicinal', l: 'Qual?', t: 'multi', req: true, se: eq('cab_UsoPlantasMedicinais', 'Sim'),
+    o: ['Camomila', 'Erva-cidreira / Melissa', 'Capim-cidreira / Capim-limão', 'Hortelã', 'Boldo', 'Alecrim', 'Guaco', 'Gengibre', 'Alfavaca / Manjericão', 'Babosa / Aloe vera', 'Outro'] },
+  { t: 'titulo', l: 'Acesso, Saúde e Doença Práticas Integrativas e Complementares de Saúde' },
+  { k: 'cab_UsoPICS', l: 'Faz uso de Práticas Integrativas e Complementares em Saúde (PICS)?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_QualPICS', l: 'Qual prática?', t: 'multi', req: true, se: eq('cab_UsoPICS', 'Sim'),
+    o: ['Fisioterapia', 'Fonoaudiologia', 'Psicoterapia / Terapia psicológica', 'Terapia Ocupacional', 'Acupuntura', 'Massoterapia', 'Homeopatia', 'Fitoterapia', 'Reiki', 'Quiropraxia', 'Meditação guiada / Mindfulness', 'Outro'] },
+  { t: 'titulo', l: 'Acesso, Saúde e Doença Internações' },
+  { k: 'cab_Internacao12Meses', l: 'Internação nos últimos 12 meses?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_TempoInternacao', l: 'Há quanto tempo ocorreu a internação?', t: 'rad', o: HA_TEMPO, se: eq('cab_Internacao12Meses', 'Sim') },
+  { k: 'cab_MotivoInternacao', l: 'Qual motivo?', t: 'area', se: eq('cab_Internacao12Meses', 'Sim') },
+  { k: 'cab_internacao_outro_1', l: 'Outro motivo de Internação?', t: 'rad', o: SN, linha: true, req: true, se: eq('cab_Internacao12Meses', 'Sim') },
+  { k: 'cab_Internacao12Meses_1', l: 'Internação nos últimos 12 meses?', t: 'rad', o: SN, linha: true, req: true, se: todos(eq('cab_Internacao12Meses', 'Sim'), eq('cab_internacao_outro_1', 'Sim')) },
+  { k: 'cab_TempoInternacao_1', l: 'Há quanto tempo ocorreu a internação?', t: 'rad', o: HA_TEMPO, se: eq('cab_Internacao12Meses_1', 'Sim') },
+  { k: 'cab_MotivoInternacao_1', l: 'Qual motivo?', t: 'area', se: eq('cab_Internacao12Meses_1', 'Sim') },
+  { k: 'cab_internacao_outro_2', l: 'Outro motivo de Internação?', t: 'rad', o: SN, linha: true, req: true, se: eq('cab_Internacao12Meses_1', 'Sim') },
+  { k: 'cab_Internacao12Meses_2', l: 'Internação nos últimos 12 meses?', t: 'rad', o: SN, linha: true, req: true, se: todos(eq('cab_Internacao12Meses_1', 'Sim'), eq('cab_internacao_outro_2', 'Sim')) },
+  { k: 'cab_TempoInternacao_2', l: 'Há quanto tempo ocorreu a internação?', t: 'rad', o: HA_TEMPO, se: eq('cab_Internacao12Meses_2', 'Sim') },
+  { k: 'cab_MotivoInternacao_2', l: 'Qual motivo?', t: 'area', se: eq('cab_Internacao12Meses_2', 'Sim') },
+  { t: 'titulo', l: 'Acesso, Saúde e Doença Cirurgia' },
+  { k: 'cab_RealizouCirurgia', l: 'Já fez alguma cirurgia?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_MotivoCirurgia', l: 'Qual o motivo?', t: 'multi', o: CIRURGIAS, req: true, se: eq('cab_RealizouCirurgia', 'Sim') },
+  { t: 'cada', k: '_cirurgias', titulo: (x) => 'Cirurgia: ' + x.id.split(' — ')[0], se: eq('cab_RealizouCirurgia', 'Sim'), itens: (o) => (o.cab_MotivoCirurgia || []).map((x) => ({ id: x, l: x })),
+    campos: (x) => [{ k: 'cab_TempoCirurgia' + codigo(x.id), l: 'Há quanto tempo realizou a cirurgia?', t: 'rad', o: HA_TEMPO, req: true }] },
+
+  { t: 'titulo', l: 'Condições de Saúde na Família' },
+  { k: 'cab_TemConvivenciaProximaFamiliaBiologica', l: 'Teve ou tem convivência próxima com familiares biológicos?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_QuaisFamiliaresConvivencia', l: 'Quais?', t: 'multi', o: FAMILIARES, req: true, se: eq('cab_TemConvivenciaProximaFamiliaBiologica', 'Sim') },
+  { k: 'cab_PossuiCondicaoSaudeFamiliar', l: 'Algum familiar tem ou já teve diagnóstico de doença genética, hereditária ou que apresente histórico familiar?', t: 'rad', o: SN, req: true },
+  { k: 'cab_FamiliarSelecionaCondicao', l: 'Condições de saúde', t: 'multi', o: CONDICOES, busca: true, req: true, se: eq('cab_PossuiCondicaoSaudeFamiliar', 'Sim') },
+  { t: 'cada', k: '_familia', titulo: (x) => 'Família: ' + x.id, se: eq('cab_PossuiCondicaoSaudeFamiliar', 'Sim'), itens: (o) => (o.cab_FamiliarSelecionaCondicao || []).map((x) => ({ id: x, l: x })),
+    campos: (x) => [{ k: 'Familiar1Perg' + codigo(x.id), l: 'Qual familiar possui essa condição?', t: 'multi', o: FAMILIARES, req: true }] },
+
+  { t: 'titulo', l: 'Linha do cuidado - Saúde da Criança', se: lc('Criança') },
+  notaLivre('No SDE esta linha de cuidado tem 29 perguntas e só parte delas foi capturada. Registre o restante em "Anotações".', lc('Criança')),
+  { k: 'cab_CriancaTermoLCSaudeCrianca', l: 'Criança a termo?', t: 'text', req: true, se: lc('Criança') },
+  { k: 'cab_AleitamentoLCSaudeCrianca', l: 'Aleitamento/alimentação:', t: 'text', req: true, se: lc('Criança') },
+  { k: 'cab_RecebeuTodasVacinasLCSaudeCrianca', l: 'Recebeu as vacinas recomendadas para a idade?', t: 'rad', o: VACINAS, req: true, se: lc('Criança') },
+  { k: 'cab_CartaoVacinaApresentadoLCSaudeCrianca', l: 'O cartão de vacinação foi apresentado para conferência?', t: 'rad', o: CARTAO, req: true, se: lc('Criança') },
+  { k: 'cab_AnotacoesLCSaudeCrianca', l: 'Anotações (demais perguntas da linha de cuidado)', t: 'area', se: lc('Criança') },
+  { t: 'titulo', l: 'Linha do cuidado - Saúde do Adolescente e Jovem', se: lc('Adolescente') },
+  ...vacinasLC('SaudeAdolescente', 'Recebeu dT, HPV (meninas e meninos), meningocócica ACWY e febre amarela?', lc('Adolescente')),
+  { t: 'titulo', l: 'Linha do cuidado - Saúde da Mulher', se: lc('Mulher') },
+  { k: 'cab_EstaGestanteLCSaudeMulher', l: 'Você está gestante no momento?', t: 'rad', o: SN, linha: true, req: true, se: lc('Mulher') },
+  { k: 'cab_PuerperioLCSaudeMulher', l: 'Está no Puerpério?', t: 'rad', o: SN, linha: true, req: true, se: lc('Mulher') },
+  ...vacinasLC('SaudeMulher', 'Recebeu as vacinas recomendadas (dT, febre amarela, tríplice viral conforme necessidade, hepatite B)?', lc('Mulher')),
+  { k: 'cab_AnotacoesLCSaudeMulher', l: 'Anotações (demais perguntas da linha de cuidado)', t: 'area', se: lc('Mulher') },
+  { t: 'titulo', l: 'Protocolo - Gestante', se: todos(lc('Mulher'), eq('cab_EstaGestanteLCSaudeMulher', 'Sim'), ge(14)) },
+  { k: 'cab_PrimeiraGestacaoProtocoloGestante', l: 'Esta é a sua primeira gestação?', t: 'rad', o: SN, linha: true, req: true, se: todos(lc('Mulher'), eq('cab_EstaGestanteLCSaudeMulher', 'Sim'), ge(14)) },
+  { k: 'cab_IdadeGestacionalProtocoloGestante', l: 'Sabe a idade gestacional?', t: 'text', req: true, se: todos(lc('Mulher'), eq('cab_EstaGestanteLCSaudeMulher', 'Sim'), ge(14)) },
+  { k: 'cab_AnotacoesProtocoloGestante', l: 'Anotações (demais perguntas do protocolo)', t: 'area', se: todos(lc('Mulher'), eq('cab_EstaGestanteLCSaudeMulher', 'Sim'), ge(14)) },
+  { t: 'titulo', l: 'Linha do cuidado - Saúde da Homem', se: lc('Homem') },
+  ...vacinasLC('SaudeHomem', 'Recebeu as vacinas recomendadas (dT, febre amarela, tríplice viral conforme necessidade, hepatite B)?', lc('Homem')),
+  { t: 'titulo', l: 'Linha do cuidado - Pessoa Idosa', se: lc('Idoso') },
+  { k: 'cab_PerdaFuncionalLCSaudeIdoso', l: 'Apresenta perda funcional?', t: 'rad', o: SN, linha: true, req: true, se: lc('Idoso') },
+  ...vacinasLC('SaudeIdoso', 'Recebeu as vacinas recomendadas (influenza anual, COVID-19 e demais do calendário da pessoa idosa)?', lc('Idoso')),
+  { t: 'titulo', l: 'Protocolo - Prevenção do Câncer de pele', se: tem('cab_PrincipaisRiscosAssociadosTrabalhoDiario', 'Exposição à Luz Solar Intensa') },
+  { k: 'cab_ProtecaoSolProtocoloPrevencaoCancerPele', l: 'Costuma utilizar algum tipo de proteção contra o sol?', t: 'text', req: true, se: tem('cab_PrincipaisRiscosAssociadosTrabalhoDiario', 'Exposição à Luz Solar Intensa') },
+  { k: 'cab_PeleQueimaProtocoloPrevencaoCancerPele', l: 'Sua pele costuma queimar com facilidade quando exposta ao sol?', t: 'text', req: true, se: tem('cab_PrincipaisRiscosAssociadosTrabalhoDiario', 'Exposição à Luz Solar Intensa') },
+  { t: 'titulo', l: 'Outros protocolos do SDE' },
+  { k: 'cab_AnotacoesOutrosProtocolos', l: 'Anotações de outros protocolos (câncer, desnutrição, sobrepeso/obesidade, prevenção de câncer de mama, próstata e colo do útero)', t: 'area' },
+  { t: 'titulo', l: 'Breve Resumo' },
+  { k: 'cab_BreveResumo', l: 'Breve Resumo', t: 'area' },
+];
+for (const f of PERFIL) if (!f.abre) { const s = f.se; f.se = s ? (o) => o.cab_DesejaPreencherPerfil === 'Sim' && s(o) : (o) => o.cab_DesejaPreencherPerfil === 'Sim'; }
+
+/* ---------- Acompanhamento (formulário 1002, "Atendimento") ---------- */
+const META_AUTO = {
+  SaudeAmbiente: (o) => FREQ_D.slice(0, 3).includes(o.cab_ExpostoFumaca) || o.cab_FumaAmbienteFechadoProtocoloTabagismo === 'Sim',
+  AlimentacaoSaudavel: (o) => ['Parcialmente saudável', 'Pouco saudável', 'Nada saudável'].includes(o.cab_AvaliaAlimentacao),
+  AtividadeFisica: (o) => FREQ.slice(3, 5).includes(o.cab_PraticaAtividadeFisica),
+  Alcool: (o) => FREQ_D.slice(0, 3).includes(o.cab_UsoBebidaAlcoolica) || o.cab_IntencaoParaReduzirFrequenciaQuantidadeProtocoloAlcoolismo === 'Sim',
+  Drogas: (o) => FREQ_D.slice(0, 3).includes(o.cab_UtilizaDrogas) || o.cab_IntencaoParaReduzirFrequenciaQuantidadeProtocoloDependenciaQuimica === 'Sim',
+  EducacaoTrabalho: (o) => { const i = idadeDe(o); return i != null && ((i > 4 && (o.cab_FrequentaEscolaCreche === 'Não' || o.cab_SabeLerEscrever === 'Não')) || (i > 13 && (o.cab_SituacaoMercado || []).includes('Desempregado'))); },
+  GestaoTempoRotina: (o) => ['Ocasionalmente', 'Raramente', 'Nunca'].some((v) => v === o.cab_AvaliaOrganizacao || v === o.cab_EquilibraTrabalhoTarefasDescanso),
+  HigienePessoal: (o) => FREQ.slice(1, 5).includes(o.cab_FrequenciaHigieneCorporalCapilar),
+  MedicacaoSegura: (o) => (o.cab_QtdMedicamentos || []).some((m) => { const n = m.replace(/\D/g, '');
+    return o['cab_3PergMedicacaoUsoContinua' + n] === 'Não' || ['Ocasionalmente', 'Raramente', 'Nunca'].includes(o['cab_UsoMedicacaoConformeOrientado' + n]) || o['cab_ArmazenamentoAdequado' + n] === 'Não'; }),
+  SaudeBucal: (o) => FREQ.slice(1, 5).includes(o.cab_FrequenciaHigieneBucal),
+  SaudeComplEnc: (o) => CONSULTA.slice(1).some((v) => v === o.cab_UltimaConsultaComMedico || v === o.cab_UltimaConsultaComDentista),
+  SaudeMental: (o) => ['Uma pessoa triste', 'Uma pessoa ansiosa', 'Uma pessoa estressada/irritada', 'Uma pessoa desanimada'].includes(o.cab_ComoConsidera),
+  SaudeSono: (o) => FREQ.slice(2, 5).includes(o.cab_ConsideraDormiuBem),
+  SaudeTrabalhador: (o) => (o.cab_PrincipaisRiscosAssociadosTrabalhoDiario || []).some((x) => x !== 'Não foram identificados riscos'),
+  SaudePele: (o) => (o.cab_PrincipaisRiscosAssociadosTrabalhoDiario || []).includes('Exposição à Luz Solar Intensa'),
+  Vacinacao: (o) => Object.keys(o).some((k) => (/^cab_RecebeuVacinasLC|^cab_RecebeuTodasVacinasLC/.test(k) && VACINAS.slice(1).includes(o[k])) || (/^cab_CartaoVacinaApresentadoLC/.test(k) && o[k] === 'Não encontrou o cartão de vacina')),
+  CessacaoTabagismo: (o) => o.cab_PrentendeParaFumarProtocoloTabagismo === 'Sim',
+};
+const temaAtivo = (cod, rot, o, d) => (META_AUTO[cod] ? META_AUTO[cod](o) : false) || ((d || o).ate_AdicionarOutrasMetas || []).includes(rot);
+function camposMeta(cod, rot) {
+  const out = [];
+  ['', '1', '2'].forEach((s, i) => {
+    const K = (b) => b + cod + s;
+    const aberta = i === 0 ? () => true : (o) => o['ate_AdicionarNovaMeta' + cod + (i === 1 ? '' : String(i - 1))] === 'Sim';
+    const on = (o) => aberta(o) && o[K('ate_AtivarMeta')] === 'Iniciar acompanhamento do autocuidado';
+    const st = (v) => (o) => on(o) && o[K('ate_Reavaliacao')] === v;
+    if (i) out.push({ t: 'titulo', l: `${rot} — meta ${i + 1}`, se: aberta });
+    out.push(
+      { k: K('ate_AtivarMeta'), l: rot, t: 'chk', v: 'Iniciar acompanhamento do autocuidado', se: aberta },
+      { k: K('ate_Detalhamento'), l: 'Detalhamento / Motivo do compromisso / Justificativa', t: 'area', req: true, se: on },
+      { k: K('ate_NivelInteresse'), l: 'Nível de interesse', t: 'rad', o: ESC10, linha: true, req: true, se: on },
+      { k: K('ate_GrauConfianca'), l: 'Grau de confiança', t: 'rad', o: ESC10, linha: true, req: true, se: on },
+      { k: K('ate_ValidacaoAlertaInteresseConfianca'), t: 'info', calc: (o) => alertaIC(o[K('ate_NivelInteresse')], o[K('ate_GrauConfianca')]), texto: (v) => ALERTAS_IC[v], se: on },
+      { k: K('ate_Reavaliacao'), l: 'Status da Meta', t: 'rad', o: ['Pactuação de Meta', 'Manter meta', 'Concluir meta', 'Cancelar meta'], linha: true, req: true, se: on },
+      { k: K('ate_DetalhamentoManterMeta'), l: 'Acompanhamento do compromisso', t: 'area', req: true, se: st('Manter meta') },
+      { k: K('ate_NivelInteresseManter'), l: 'Nível de interesse', t: 'rad', o: ESC10, linha: true, req: true, se: st('Manter meta') },
+      { k: K('ate_GrauConfiancaManter'), l: 'Grau de confiança', t: 'rad', o: ESC10, linha: true, req: true, se: st('Manter meta') },
+      { k: K('ate_ValidacaoAlertaManterInteresseConfianca'), t: 'info', calc: (o) => alertaIC(o[K('ate_NivelInteresseManter')], o[K('ate_GrauConfiancaManter')]), texto: (v) => ALERTAS_IC[v], se: st('Manter meta') },
+      { k: K('ate_DetalhamentoCancelarMeta'), l: 'Detalhamento da justificativa', t: 'area', req: true, se: st('Cancelar meta') },
+      { k: K('ate_DetalhamentoConquistaMeta'), l: 'Detalhamento da conquista', t: 'area', req: true, se: st('Concluir meta') },
+      { k: K('ate_DataFimMeta'), l: 'Data Fim', t: 'date', req: true, se: st('Concluir meta') },
+      { k: K('ate_Conquistas'), l: 'Conquistas alcançadas:', t: 'area', req: true, ph: 'Opções não capturadas do SDE: descreva', se: st('Concluir meta') });
+    if (i < 2) out.push({ k: K('ate_AdicionarNovaMeta'), l: 'Deseja adicionar uma nova meta para este tema?', t: 'chk', v: 'Sim', se: on });
+  });
+  return out;
+}
+const PROCS = ['Peso', 'Altura', 'IMC', 'Perímetro encefálico', 'Pressão arterial', 'Frequência cardíaca', 'Frequência respiratória', 'Glicemia capilar', 'Circunferência abdominal', 'Saturação', 'Temperatura', 'Outro'];
+const proc = (p) => todos(eq('ate_RealizadoAlgumProcedimento', 'Sim'), tem('cab_TipoProcedimento', p));
+const doPerfil = (k) => (o) => (o.ate_UtilizarDadosPerfil === 'Sim' ? o[k] || '' : '');
+function imcProc(o) { const p = num(o.cab_PesoProcedimentos || doPerfil('cab_Peso')(o)); let a = num(o.cab_AlturaProcedimentos || doPerfil('cab_Altura')(o));
+  if (!p || !a) return ''; if (a > 3) a /= 100; const v = p / (a * a); return isFinite(v) ? v.toFixed(2).replace('.', ',') : ''; }
+const ACOMP = [
+  { t: 'titulo', l: 'AutoCuidado' },
+  { k: 'ate_EstadoSaudeUltimosDias', l: 'Nos últimos dias, como está o seu estado de saúde?', t: 'rad', o: ['Muito bom', 'Bom', 'Regular', 'Ruim', 'Muito ruim'], linha: true, req: true },
+  { k: 'ate_TemSeSentido', l: 'Tem se sentido...', t: 'multi', req: true,
+    o: ['Uma pessoa ansiosa', 'Uma pessoa bem-disposta', 'Uma pessoa calma', 'Uma pessoa cansada', 'Uma pessoa desanimada', 'Uma pessoa estressada/irritada', 'Uma pessoa feliz', 'Uma pessoa triste'] },
+  { t: 'titulo', l: 'Planejamento AutoCuidado' },
+  { t: 'info', k: '_temasPerfil', calc: (o) => { const a = TEMAS.filter(([c]) => META_AUTO[c] && META_AUTO[c](o)).map(([, r]) => r);
+    return a.length ? 'Temas ativados pelo perfil de saúde: ' + a.join(', ') + '.' : 'Nenhum tema ativado pelo perfil de saúde. Inclua temas abaixo, se for o caso.'; } },
+  { t: 'cada', k: '_metas', titulo: (x) => x.l, itens: (o, d) => TEMAS.filter(([c, r]) => temaAtivo(c, r, o, d)).map(([c, r]) => ({ id: c, l: r })), campos: (x) => camposMeta(x.id, x.l) },
+  { k: 'ate_AdicionarOutrasMetas', l: 'Deseja adicionar metas não mapeadas no perfil?', t: 'multi', o: TEMAS.map(([, r]) => r) },
+  { t: 'titulo', l: 'Conquista não pactuada previamente' },
+  { k: 'cab_ConquistaAlcancada', l: 'O assistido teve alguma conquista não pactuada previamente?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_MetasNaoPactuadas', l: 'Categoria da conquista', t: 'multi', o: TEMAS.filter(([c]) => c !== 'CessacaoTabagismo').map(([, r]) => r), req: true, se: eq('cab_ConquistaAlcancada', 'Sim') },
+  { t: 'cada', k: '_conquistas', titulo: (x) => 'Conquista: ' + x.l, se: eq('cab_ConquistaAlcancada', 'Sim'),
+    itens: (o) => (o.cab_MetasNaoPactuadas || []).map((r) => ({ id: (TEMAS.find((t) => t[1] === r) || [codigo(r)])[0], l: r })),
+    campos: (x) => [
+      { k: 'cab_QuemPercebeuConquista' + x.id, l: 'Quem percebeu essa conquista inicialmente?', t: 'text', req: true, ph: 'Opções não capturadas do SDE: descreva' },
+      { k: 'cab_DetalhamentoConquista' + x.id, l: 'Detalhamento da conquista', t: 'area', req: true }] },
+  { t: 'titulo', l: 'Procedimentos' },
+  { k: 'ate_RealizadoAlgumProcedimento', l: 'Foi realizado algum procedimento?', t: 'rad', o: SN, linha: true, req: true },
+  { k: 'cab_TipoProcedimento', l: 'Selecione os procedimentos que serão avaliados:', t: 'multi', o: PROCS, se: eq('ate_RealizadoAlgumProcedimento', 'Sim') },
+  { k: 'ate_UtilizarDadosPerfil', l: 'Deseja utilizar as aferições marcadas no perfil de saúde?', t: 'rad', o: SN, linha: true, se: eq('ate_RealizadoAlgumProcedimento', 'Sim') },
+  { k: 'cab_PesoProcedimentos', l: 'Peso', t: 'num', dec: true, req: true, def: doPerfil('cab_Peso'), se: proc('Peso') },
+  { k: 'cab_AlturaProcedimentos', l: 'Altura', t: 'num', dec: true, req: true, def: doPerfil('cab_Altura'), se: proc('Altura') },
+  { k: 'cab_IMCProcedimentos', l: 'IMC', t: 'calc', calc: imcProc, se: proc('IMC') },
+  { k: 'cab_PerimetroEncefalicoProcedimentos', l: 'Perímetro encefálico', t: 'num', dec: true, req: true, se: proc('Perímetro encefálico') },
+  { k: 'ate_PressaoArterialSistolica', l: 'Sistólica', t: 'num', req: true, def: doPerfil('cab_PressaoArterialSistolica'), se: proc('Pressão arterial') },
+  { k: 'ate_PressaoArterialDiastolica', l: 'Diastólica', t: 'num', req: true, def: doPerfil('cab_PressaoArterialDiastolica'), se: proc('Pressão arterial') },
+  { k: 'cab_FrequenciaCardiacaProcedimentos', l: 'Frequência cardíaca', t: 'num', req: true, se: proc('Frequência cardíaca') },
+  { k: 'cab_FrequenciaRespiratoriaProcedimentos', l: 'Frequência respiratória', t: 'num', req: true, se: proc('Frequência respiratória') },
+  { k: 'cab_GlicemiaCapilarProcedimentos', l: 'Glicemia capilar', t: 'num', req: true, se: proc('Glicemia capilar') },
+  { k: 'cab_CircunferenciaAbdominalProcedimentos', l: 'Circunferência abdominal', t: 'num', dec: true, req: true, se: proc('Circunferência abdominal') },
+  { k: 'cab_SaturacaoProcedimentos', l: 'Saturação', t: 'num', req: true, se: proc('Saturação') },
+  { k: 'cab_TemperaturaProcedimentos', l: 'Temperatura', t: 'num', dec: true, req: true, se: proc('Temperatura') },
+  { k: 'cab_OutroProcedimento', l: 'Outro', t: 'text', req: true, se: proc('Outro') },
+  { t: 'titulo', l: 'Acionamento de Teleconsulta' },
+  { k: 'ate_AcionarEspecialista', l: 'Deseja acionar a Teleconsulta (Especialista Einstein)?', t: 'rad', o: SN, linha: true, req: true },
+  notaLivre('Sem o SDE, a Teleconsulta não é acionada por este app. Registre aqui e acione pelo SDE (ou pelo canal de contingência da coordenação) assim que possível. Em urgência, siga o fluxo local (SAMU 192).', eq('ate_AcionarEspecialista', 'Sim')),
+  { k: 'ate_TipoAtendimento', l: 'Selecione a especialidade / Tipo de Atendimento', t: 'rad', o: ['Clínica Médica', 'Pediatria', 'Psicologia', 'Enfermagem'], req: true, se: eq('ate_AcionarEspecialista', 'Sim') },
+  { k: 'ate_MotivoAcionamento', l: 'Motivo do Acionamento', t: 'area', req: true, se: eq('ate_AcionarEspecialista', 'Sim') },
+  { k: 'ate_BreveResumo', l: 'Breve Resumo', t: 'area', se: eq('ate_AcionarEspecialista', 'Não') },
+];
 
 /* Campos. "k" usa o nome do campo no SDE (cab_…) quando existe, para facilitar o lançamento depois. */
 const F = {
@@ -194,63 +591,8 @@ const F = {
     { k: 'cab_AceitePrograma', l: 'Aceitou participar do programa?', t: 'sn', req: true },
     { k: 'termo', l: 'Foto do termo de aceite (opcional)', t: 'foto', se: (o) => o.cab_AceitePrograma === 'Sim' },
   ],
-  perfil: [
-    { t: 'titulo', l: 'Condições de saúde' },
-    { k: 'cab_PossuiDoencaLongaDuracao', l: 'Possui doença de longa duração?', t: 'sn' },
-    { k: 'condicoes', l: 'Condições / doenças', t: 'multi', o: CONDICOES, busca: true, se: (o) => o.cab_PossuiDoencaLongaDuracao === 'Sim' },
-    { k: 'condicoes_outras', l: 'Outras condições (descrever)', t: 'text', se: (o) => o.cab_PossuiDoencaLongaDuracao === 'Sim' },
-    { k: 'alergias', l: 'Alergias (medicamentos, alimentos, outras)', t: 'text' },
-    { t: 'titulo', l: 'Medicações' },
-    { k: 'cab_MedicacaoUsoContinuoPrescritoProfissiona', l: 'Usa medicação contínua prescrita?', t: 'sn' },
-    { k: 'medicacoes', l: 'Quais medicações (nome e dose)', t: 'area', se: (o) => o.cab_MedicacaoUsoContinuoPrescritoProfissiona === 'Sim' },
-    { k: 'cab_UsoMedicacaoConformeOrientado', l: 'Usa conforme orientado?', t: 'sel', o: ['Sim', 'Não', 'Às vezes'], se: (o) => o.cab_MedicacaoUsoContinuoPrescritoProfissiona === 'Sim' },
-    { t: 'titulo', l: 'Acesso à saúde' },
-    { k: 'cab_UltimaConsultaComMedico', l: 'Última consulta com médico', t: 'sel', o: TEMPO },
-    { k: 'cab_UltimaConsultaComDentista', l: 'Última consulta com dentista', t: 'sel', o: TEMPO },
-    { t: 'titulo', l: 'Hábitos e estilo de vida' },
-    { k: 'tabagismo', l: 'Fuma ou usa tabaco?', t: 'sel', o: ['Nunca fumou', 'Fuma atualmente', 'Ex-fumante'] },
-    { k: 'cab_PrentendeParaFumarProtocoloTabagismo', l: 'Pretende parar de fumar?', t: 'sn', se: (o) => o.tabagismo === 'Fuma atualmente' },
-    { k: 'cab_FumaAmbienteFechadoProtocoloTabagismo', l: 'Fuma em ambiente fechado?', t: 'sn', se: (o) => o.tabagismo === 'Fuma atualmente' },
-    { k: 'cab_UsoBebidaAlcoolica', l: 'Consumo de bebida alcoólica', t: 'sel', o: ['Não bebe', 'Raramente', '1 a 2 vezes por semana', '3 ou mais vezes por semana', 'Diariamente'] },
-    { k: 'cab_UtilizaDrogas', l: 'Utiliza outras drogas?', t: 'sel', o: ['Não', 'Sim', 'Prefere não responder'] },
-    { k: 'cab_PraticaAtividadeFisica', l: 'Pratica atividade física (além do trabalho)?', t: 'sn' },
-    { k: 'cab_AvaliaAlimentacao', l: 'Como avalia a própria alimentação', t: 'sel', o: ['Boa', 'Regular', 'Ruim'] },
-    { k: 'cab_ConsideraDormiuBem', l: 'Considera que dorme bem?', t: 'sn' },
-    { k: 'cab_EquilibraTrabalhoTarefasDescanso', l: 'Equilibra trabalho, tarefas e descanso?', t: 'sn' },
-    { k: 'cab_FrequenciaHigieneBucal', l: 'Escovação dos dentes por dia', t: 'sel', o: ['Nenhuma', '1 vez', '2 vezes', '3 ou mais vezes'] },
-    { t: 'titulo', l: 'Saúde do trabalhador', se: (o) => { const i = idadeDe(o); return i == null || i >= 14; } },
-    { k: 'usa_epi', l: 'Usa EPI com agrotóxicos e máquinas?', t: 'sel', o: ['Sempre', 'Às vezes', 'Nunca', 'Não se aplica'], se: (o) => { const i = idadeDe(o); return i == null || i >= 14; } },
-    { k: 'protecao_solar', l: 'Usa proteção solar no trabalho?', t: 'sel', o: ['Sempre', 'Às vezes', 'Nunca', 'Não se aplica'], se: (o) => { const i = idadeDe(o); return i == null || i >= 14; } },
-    { t: 'titulo', l: 'Saúde da criança', se: (o) => { const i = idadeDe(o); return i != null && i < 12; } },
-    { k: 'cab_CartaoVacinaApresentadoLCSaudeCrianca', l: 'Cartão de vacina apresentado?', t: 'sn', se: (o) => { const i = idadeDe(o); return i != null && i < 12; } },
-    { k: 'cab_RecebeuTodasVacinasLCSaudeCrianca', l: 'Vacinas em dia?', t: 'sel', o: SIM_NAO_NS, se: (o) => { const i = idadeDe(o); return i != null && i < 12; } },
-    { t: 'titulo', l: 'Saúde da mulher', se: (o) => mulher(o) && (idadeDe(o) == null || idadeDe(o) >= 10) },
-    { k: 'gestante', l: 'Está gestante?', t: 'sel', o: ['Não', 'Sim', 'Não sabe'], se: (o) => mulher(o) && (idadeDe(o) == null || (idadeDe(o) >= 10 && idadeDe(o) <= 55)) },
-    { k: 'pre_natal', l: 'Faz pré-natal?', t: 'sn', se: (o) => mulher(o) && o.gestante === 'Sim' },
-    { k: 'preventivo', l: 'Último exame preventivo (Papanicolau)', t: 'sel', o: TEMPO, se: (o) => mulher(o) && (idadeDe(o) == null || idadeDe(o) >= 25) },
-    { k: 'mamografia', l: 'Última mamografia', t: 'sel', o: TEMPO, se: (o) => mulher(o) && (idadeDe(o) == null || idadeDe(o) >= 40) },
-    { t: 'titulo', l: 'Observações' },
-    { k: 'obs_perfil', l: 'Observações do perfil de saúde', t: 'area' },
-  ],
-  acomp: [
-    { t: 'titulo', l: 'Medidas' },
-    { k: 'cab_Peso', l: 'Peso (kg)', t: 'num', dec: true },
-    { k: 'cab_Altura', l: 'Altura (cm)', t: 'num', dec: true },
-    { k: 'cab_IMC', l: 'IMC', t: 'calc', calc: imc },
-    { k: 'cab_PressaoArterialSistolica', l: 'Pressão sistólica (mmHg)', t: 'num' },
-    { k: 'cab_PressaoArterialDiastolica', l: 'Pressão diastólica (mmHg)', t: 'num' },
-    { k: 'fc', l: 'Frequência cardíaca (bpm)', t: 'num' },
-    { k: 'glicemia', l: 'Glicemia capilar (mg/dL)', t: 'num' },
-    { k: 'glicemia_jejum', l: 'Glicemia em jejum?', t: 'sn', se: (o) => !vazio(o.glicemia) },
-    { k: 'circ_abdominal', l: 'Circunferência abdominal (cm)', t: 'num', dec: true },
-    { t: 'titulo', l: 'Atendimento' },
-    { k: 'queixas', l: 'Queixas / situação atual', t: 'area' },
-    { k: 'orientacoes', l: 'Orientações e condutas', t: 'area' },
-    { k: 'cab_encaminhar_especialista', l: 'Precisa de encaminhamento?', t: 'sn' },
-    { k: 'encaminhamento', l: 'Para onde / qual especialidade', t: 'text', se: (o) => o.cab_encaminhar_especialista === 'Sim' },
-    { k: 'urgente', l: 'Situação de urgência identificada?', t: 'sn' },
-    { k: 'urgente_desc', l: 'O que foi identificado e o que foi feito', t: 'area', se: (o) => o.urgente === 'Sim' },
-  ],
+  perfil: PERFIL,
+  acomp: ACOMP,
 };
 
 /* ============ estado e gravação ============ */
@@ -447,6 +789,36 @@ function campo(f, d, aoMudar, visitaId) {
       box.append(el('div', { class: 'campo', style: 'margin:0' }, b));
     }
     box.append(lista);
+  } else if (f.t === 'rad') {
+    const g = el('div', { class: 'radios' + (f.linha ? ' linha' : ''), id, role: 'radiogroup' });
+    for (const o of opcoes(f)) {
+      const r = el('input', { type: 'radio', name: id, value: o.v }); r.checked = d[f.k] === o.v;
+      r.addEventListener('click', () => { if (d[f.k] === o.v) { r.checked = false; set(''); } else set(o.v); });
+      g.append(el('label', {}, r, o.l));
+    }
+    if (!vazio(d[f.k]) && !opcoes(f).some((o) => o.v === d[f.k])) g.append(el('div', { class: 'dica' }, `Resposta anterior: ${d[f.k]}`));
+    box.append(g);
+  } else if (f.t === 'chk') {
+    const cb = el('input', { type: 'checkbox', id }); cb.checked = d[f.k] === f.v;
+    cb.addEventListener('change', () => set(cb.checked ? f.v : ''));
+    box.append(el('div', { class: 'multi' }, el('label', {}, cb, f.v)));
+  } else if (f.t === 'lista') {
+    const area = el('div', { id, class: 'lista' });
+    const arr = () => (Array.isArray(d[f.k]) ? d[f.k].slice() : []);
+    const gravar = (b) => { if (b.some((x) => x.trim())) set(b); else { set(''); if (b.length > 1) d[f.k] = b; } };
+    const desenhar = () => {
+      area.textContent = ''; const a = arr(); if (!a.length) a.push('');
+      a.forEach((v, i) => {
+        const inp = el('input', { type: 'text', autocomplete: 'off', autocapitalize: 'words' }); inp.value = v;
+        inp.addEventListener('input', () => { const b = arr(); while (b.length <= i) b.push(''); b[i] = inp.value; gravar(b); });
+        const rm = el('button', { type: 'button', class: 'btn peq perigo', 'aria-label': 'Remover', onclick: () => { const b = arr(); b.splice(i, 1); gravar(b); desenhar(); } }, '×');
+        area.append(el('div', { class: 'linhaLista' }, inp, rm));
+      });
+      area.append(el('button', { type: 'button', class: 'btn peq', onclick: () => { const b = arr(); if (!b.length) b.push(''); b.push(''); d[f.k] = b; desenhar(); } }, 'Acrescentar campo'));
+    };
+    desenhar(); box.append(area);
+  } else if (f.t === 'info') {
+    box.classList.add('aviso', 'info'); box.textContent = ''; box.append(el('span', { class: 'infoTxt' }));
   } else if (f.t === 'calc') {
     box.append(el('div', { class: 'calc', id }, '—'));
   } else if (f.t === 'foto') {
@@ -474,32 +846,71 @@ function campo(f, d, aoMudar, visitaId) {
   }
   return box;
 }
-function formulario(schema, dados, ctx, aoMudar) {
-  const wrap = el('div', { class: 'form' }); const itens = [];
-  const atualizar = () => {
-    const c = ctx();
-    for (const { f, node } of itens) {
-      if (f.se) node.hidden = !f.se(c);
-      if (f.t === 'calc') node.querySelector('.calc').textContent = f.calc(c) || '—';
+/* Campos de um grupo repetido ("cada": um bloco por condição, medicamento, tema…), com cache para manter a identidade. */
+function camposDe(f, x) {
+  if (!f._memo) f._memo = new Map();
+  if (!f._memo.has(x.id)) f._memo.set(x.id, f.campos(x));
+  return f._memo.get(x.id);
+}
+/* Percorre o formulário na ordem: só entram no contexto as respostas de campos visíveis (resposta escondida não conta nem é exportada). */
+function podar(schema, base, dados) {
+  const c = { ...base }; const vis = new Set(); const itens = new Map(); const campos = [];
+  const passo = (f) => {
+    const ok = !f.se || f.se(c);
+    if (f.t === 'cada') {
+      const its = ok ? f.itens(c, dados) : []; itens.set(f, its);
+      for (const x of its) for (const g of camposDe(f, x)) passo(g);
+      return;
     }
+    if (!ok) return;
+    vis.add(f);
+    if (f.t === 'titulo') return;
+    if (f.k && f.k in dados) c[f.k] = dados[f.k];
+    campos.push(f);
   };
-  for (const f of schema) {
-    const node = f.t === 'titulo' ? el('h3', { class: 'sec' }, f.l) : campo(f, dados, () => { aoMudar(); atualizar(); }, V && V.id);
-    if (f.k) node.dataset.k = f.k;
-    itens.push({ f, node }); wrap.append(node);
-  }
+  schema.forEach(passo);
+  return { c, vis, itens, campos };
+}
+function formulario(schema, dados, base, aoMudar) {
+  const wrap = el('div', { class: 'form' }); const itens = [];
+  const nodeDe = (f) => {
+    const n = f.t === 'titulo' ? el('h3', { class: 'sec' }, f.l) : f.t === 'cada' ? el('div', { class: 'cada' }) : campo(f, dados, () => { aoMudar(); atualizar(); }, V && V.id);
+    if (f.k) n.dataset.k = f.k; return n;
+  };
+  const atualizar = () => {
+    const r = podar(schema, base(), dados);
+    const aplicar = (lista) => {
+      for (const it of lista) {
+        const { f, node } = it;
+        if (f.t === 'cada') {
+          const its = r.itens.get(f) || []; const sig = its.map((x) => x.id).join('\n');
+          if (node.dataset.sig !== sig || !it.sub) {
+            node.dataset.sig = sig; node.textContent = ''; it.sub = [];
+            for (const x of its) {
+              node.append(el('h3', { class: 'sec' }, f.titulo ? f.titulo(x) : x.l));
+              for (const g of camposDe(f, x)) { const n = nodeDe(g); node.append(n); it.sub.push({ f: g, node: n }); }
+            }
+          }
+          node.hidden = !its.length; aplicar(it.sub); continue;
+        }
+        node.hidden = !r.vis.has(f);
+        if (f.t === 'calc') node.querySelector('.calc').textContent = f.calc(r.c) || '—';
+        if (f.t === 'info') { const v = r.vis.has(f) ? f.calc(r.c) : ''; node.querySelector('.infoTxt').textContent = v ? (f.texto ? f.texto(v) : v) : ''; if (!v) node.hidden = true; }
+        if (f.def) { const i = node.querySelector('input'); if (i) i.placeholder = f.def(r.c) ? 'Do perfil: ' + f.def(r.c) : f.ph || ''; }
+      }
+    };
+    aplicar(itens);
+  };
+  for (const f of schema) { const node = nodeDe(f); itens.push({ f, node }); wrap.append(node); }
   atualizar();
   return el('div', {}, bloqueada() ? el('div', { class: 'aviso info' }, 'Visita finalizada: somente leitura. Para corrigir, volte à visita e toque em "Reabrir para corrigir".') : null,
     el('fieldset', { disabled: bloqueada() || null }, wrap));
 }
-function faltando(schema, dados, ctx) {
-  const c = ctx ? ctx() : dados;
-  return schema.filter((f) => f.req && (!f.se || f.se(c)) && vazio(dados[f.k])).map((f) => f.l);
+function faltando(schema, dados, base) {
+  return podar(schema, base || {}, dados).campos.filter((f) => f.req && vazio(dados[f.k]) && !(f.def && f.def({ ...base, ...dados }))).map((f) => f.l);
 }
-function marcarFaltando(raiz, schema, dados, ctx) {
-  const c = ctx ? ctx() : dados;
-  for (const f of schema) if (f.req && (!f.se || f.se(c)) && vazio(dados[f.k])) { const n = raiz.querySelector(`[data-k="${f.k}"]`); if (n) n.classList.add('faltando'); }
-}
+const basePerfil = (a) => a.cadastro;
+const baseAcomp = (a) => ({ ...a.cadastro, ...podar(F.perfil, a.cadastro, a.perfil).c });
 
 /* ============ telas ============ */
 function cabecalho(titulo, sub, voltar) {
@@ -514,11 +925,10 @@ function card(titulo, passo, feito, ...conteudo) {
 }
 const nomeAssistido = (a) => a.cadastro.cab_NomeSocial || a.cadastro.cab_NomeCompleto || '(sem nome)';
 function situacaoAssistido(a) {
-  const ctx = () => ({ ...a.cadastro, ...a.perfil, ...a.acomp });
   return {
-    cad: faltando(F.cadastro, a.cadastro, ctx).length === 0,
-    perfil: Object.keys(a.perfil).length > 0,
-    acomp: Object.keys(a.acomp).length > 0,
+    cad: faltando(F.cadastro, a.cadastro).length === 0,
+    perfil: !vazio(a.perfil.cab_DesejaPreencherPerfil) && faltando(F.perfil, a.perfil, basePerfil(a)).length === 0,
+    acomp: Object.keys(a.acomp).length > 0 && faltando(F.acomp, a.acomp, baseAcomp(a)).length === 0,
   };
 }
 
@@ -695,7 +1105,8 @@ function telaAssistido(aid, aba) {
     el('a', { href: base, class: aba === 'cad' ? 'atual' : null }, (s.cad ? '✓ ' : '') + 'Cadastro'),
     el('a', { href: base + '/perfil', class: aba === 'perfil' ? 'atual' : null }, (s.perfil ? '✓ ' : '') + 'Saúde'),
     el('a', { href: base + '/acomp', class: aba === 'acomp' ? 'atual' : null }, (s.acomp ? '✓ ' : '') + 'Acompanhamento')));
-  const ctx = () => ({ ...a.cadastro, ...a.perfil, ...a.acomp });
+  if (vazio(a.perfil.cab_DesejaPreencherPerfil) && Object.keys(a.perfil).length) a.perfil.cab_DesejaPreencherPerfil = 'Sim'; // visitas da versão 1.0
+  const ctx = aba === 'cad' ? () => ({}) : aba === 'perfil' ? () => basePerfil(a) : () => baseAcomp(a);
   const dados = aba === 'cad' ? a.cadastro : aba === 'perfil' ? a.perfil : a.acomp;
   const schema = aba === 'cad' ? F.cadastro : aba === 'perfil' ? F.perfil : F.acomp;
   if (aba !== 'cad' && !a.cadastro.cab_DataNascimento) t.append(el('div', { class: 'aviso' }, 'Preencha a data de nascimento e o sexo no Cadastro para mostrar as perguntas da faixa etária certa.'));
@@ -722,12 +1133,16 @@ async function finalizar() {
   for (const x of faltando(F.visita, V.visita)) av.push('Dados da visita: ' + x);
   V.domicilios.forEach((d, i) => faltando(F.domicilio, d).forEach((x) => av.push(`Domicílio ${i + 1}: ${x}`)));
   V.assistidos.forEach((a) => {
-    const ctx = () => ({ ...a.cadastro, ...a.perfil, ...a.acomp });
-    faltando(F.cadastro, a.cadastro, ctx).forEach((x) => av.push(`${nomeAssistido(a)}: ${x}`));
-    if (!Object.keys(a.perfil).length) av.push(`${nomeAssistido(a)}: perfil de saúde vazio`);
+    const n = nomeAssistido(a);
+    faltando(F.cadastro, a.cadastro).forEach((x) => av.push(`${n}: ${x}`));
+    if (vazio(a.perfil.cab_DesejaPreencherPerfil)) av.push(`${n}: responder "Deseja preencher o perfil de saúde?"`);
+    else faltando(F.perfil, a.perfil, basePerfil(a)).forEach((x) => av.push(`${n} (saúde): ${x}`));
+    if (Object.keys(a.acomp).length) faltando(F.acomp, a.acomp, baseAcomp(a)).forEach((x) => av.push(`${n} (acompanhamento): ${x}`));
   });
   if (!V.assistidos.length) av.push('Nenhum assistido cadastrado');
   if (V.checkin.geoErro || V.checkout.geoErro) av.push('Check-in ou check-out sem localização');
+  const durMin = Math.round((new Date(V.checkout.em) - new Date(V.checkin.em)) / 60000);
+  if (durMin < 120 && !confirm(`Atenção: esta visita durou ${Math.floor(Math.max(0, durMin) / 60)}h${pad(Math.max(0, durMin) % 60)}, menos de 2 horas entre o check-in e o check-out.\n\nDeseja finalizar mesmo assim?`)) return;
   if (av.length && !confirm('Atenção, há itens incompletos:\n\n• ' + av.slice(0, 15).join('\n• ') + (av.length > 15 ? `\n… e mais ${av.length - 15}` : '') + '\n\nFinalizar mesmo assim?')) return;
   V.status = 'finalizada'; V.finalizadaEm = new Date().toISOString(); mudou(); await salvarAgora();
   toast('Visita finalizada. Lembre-se de exportar.'); render();
@@ -792,26 +1207,80 @@ async function lerZip(buf) {
   }
   return out;
 }
-function valorCSV(f, v, c, vis) {
-  if (f.t === 'calc') return f.calc(c);
+/* ---------- exportação: uma planilha Excel com todas as visitas ---------- */
+function valorExport(f, c, nomesFotos, vis) {
+  if (f.t === 'calc' || f.t === 'info') return f.calc(c) || '';
+  let v = c[f.k]; if (vazio(v) && f.def) v = f.def(c);
   if (vazio(v)) return '';
+  if (f.t === 'foto') return nomesFotos[v] || '';
   if (f.t === 'date') return dataBR(v);
-  if (f.t === 'multi') return v.join(' | ');
+  if (Array.isArray(v)) return v.filter((x) => !vazio(x)).join(' | ');
   if (f.t === 'sel' && typeof f.o === 'function') { const o = opcoes(f, vis).find((x) => x.v === v); return o ? o.l : v; }
   return v;
 }
-function colunas(schema, pref) { return schema.filter((f) => f.t !== 'titulo').map((f) => ({ k: pref + f.k, l: f.l, f })); }
-function preencher(linha, schema, pref, dados, ctx, nomesFotos, vis) {
-  for (const f of schema) if (f.t !== 'titulo') linha[pref + f.k] = f.t === 'foto' ? (nomesFotos[dados[f.k]] || '') : valorCSV(f, dados[f.k], ctx, vis);
+/* Colunas visíveis de um formulário para uma linha: [{k, l, form}] e os valores em lin. */
+function linhaForm(lin, cols, form, pre, schema, base, dados, nomesFotos, vis) {
+  const r = podar(schema, base, dados);
+  for (const f of r.campos) {
+    if (!f.k || f.k[0] === '_' || (f.t === 'info' && !f.texto)) continue;
+    const k = pre + f.k;
+    cols.push({ k, l: f.l || f.k, form, nome: f.k });
+    lin[k] = valorExport(f, r.c, nomesFotos, vis);
+  }
+  return r;
 }
-function csv(linhas, cols) {
-  const esc = (v) => { v = v == null ? '' : String(v); return /[;"\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-  return '﻿' + [cols.map((c) => esc(c.l)).join(';'), ...linhas.map((r) => cols.map((c) => esc(r[c.k])).join(';'))].join('\r\n') + '\r\n';
+/* Junta as colunas de várias linhas mantendo a ordem do formulário. */
+function mesclar(ordem, lista) {
+  let pos = -1;
+  for (const c of lista) {
+    const i = ordem.findIndex((x) => x.k === c.k);
+    if (i >= 0) pos = i; else { ordem.splice(pos + 1, 0, c); pos++; }
+  }
 }
-function colsPonto(tipo, n) {
-  return [['em', `${n} — data e hora`], ['lat', `${n} — latitude`], ['lng', `${n} — longitude`], ['precisao', `${n} — precisão (m)`], ['geoErro', `${n} — problema de localização`], ['foto', `${n} — arquivo da foto`]]
-    .map(([k, l]) => ({ k: tipo + '.' + k, l }));
+function matriz(linhas) {
+  const cols = []; for (const l of linhas) mesclar(cols, l.cols);
+  const cab = [cols.map((c) => c.form), cols.map((c) => c.l), cols.map((c) => c.nome)];
+  return [...cab, ...linhas.map((l) => cols.map((c) => (l.v[c.k] == null ? '' : String(l.v[c.k]))))];
 }
+const colLetra = (n) => { let s = ''; n++; while (n) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+const xesc = (s) => String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, 32000).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function criarXlsx(folhas) {
+  const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const NS = 'http://schemas.openxmlformats.org/';
+  const folhaXML = (m) => {
+    const larg = Math.max(1, ...m.map((l) => l.length));
+    const linhas = m.map((lin, r) => `<row r="${r + 1}">` + lin.map((v, c) => (v === '' ? '' :
+      `<c r="${colLetra(c)}${r + 1}" t="inlineStr"${r < 3 ? ` s="${r === 1 ? 2 : 1}"` : ''}><is><t xml:space="preserve">${xesc(v)}</t></is></c>`)).join('') + '</row>').join('');
+    return `${X}<worksheet xmlns="${NS}spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane xSplit="0" ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
+      `<cols><col min="1" max="${larg}" width="26" customWidth="1"/></cols><sheetData>${linhas}</sheetData></worksheet>`;
+  };
+  const enc = new TextEncoder();
+  const arqs = [
+    { nome: '[Content_Types].xml', dados: enc.encode(`${X}<Types xmlns="${NS}package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>` +
+      `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+      folhas.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>') },
+    { nome: '_rels/.rels', dados: enc.encode(`${X}<Relationships xmlns="${NS}package/2006/relationships"><Relationship Id="rId1" Type="${NS}officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) },
+    { nome: 'xl/workbook.xml', dados: enc.encode(`${X}<workbook xmlns="${NS}spreadsheetml/2006/main" xmlns:r="${NS}officeDocument/2006/relationships"><sheets>` +
+      folhas.map((f, i) => `<sheet name="${xesc(f.nome)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>') },
+    { nome: 'xl/_rels/workbook.xml.rels', dados: enc.encode(`${X}<Relationships xmlns="${NS}package/2006/relationships">` +
+      folhas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${NS}officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+      `<Relationship Id="rId${folhas.length + 1}" Type="${NS}officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`) },
+    { nome: 'xl/styles.xml', dados: enc.encode(`${X}<styleSheet xmlns="${NS}spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><sz val="9"/><color rgb="FF666666"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>` +
+      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/></patternFill></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+      '<xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs></styleSheet>') },
+    ...folhas.map((f, i) => ({ nome: `xl/worksheets/sheet${i + 1}.xml`, dados: enc.encode(folhaXML(f.m)) })),
+  ];
+  return new Uint8Array(await criarZip(arqs).arrayBuffer());
+}
+function etapasAtendimento(a) {
+  const e = ['Cadastro do Assistido'];
+  if (a.perfil.cab_DesejaPreencherPerfil === 'Sim') e.push('Perfil de Saúde');
+  if (Object.keys(a.acomp).length) e.push('Acompanhamento');
+  return e;
+}
+const categoriaVisita = (e) => (e.includes('Acompanhamento') ? 'Acompanhamento' : e.includes('Perfil de Saúde') ? 'Perfil de Saúde' : 'Visita de Cadastro');
 async function montarExportacao(visitas) {
   const enc = new TextEncoder(); const arqs = []; const fotosIdx = []; const nomesFotos = {};
   for (const v of visitas) {
@@ -826,49 +1295,79 @@ async function montarExportacao(visitas) {
       arqs.push({ nome, dados: new Uint8Array(f.buf) });
     }
   }
-  const lV = [], lD = [], lA = [], lP = [], lC = [];
+  const fx = (k, l, form = 'Controle (app)') => ({ k, l, form, nome: k });
+  const T = { vis: [], dom: [], ass: [], perf: [], acomp: [], tudo: [] };
   for (const v of visitas) {
     const p = v.propriedade;
-    const base = { 'visita.id': v.id, 'ateg': p.cab_IdATeG || '', 'propriedade': p.cab_NomePropriedade || '' };
-    const lin = { ...base, status: v.status === 'finalizada' ? 'Finalizada' : 'Em andamento', tecnico: v.tecnico, criadoEm: dataHora(v.criadoEm), finalizadaEm: dataHora(v.finalizadaEm),
-      qtdDom: v.domicilios.length, qtdAss: v.assistidos.length };
-    preencher(lin, F.propriedade, 'p.', p, p, nomesFotos);
-    preencher(lin, F.visita, 'v.', v.visita, v.visita, nomesFotos);
-    for (const tipo of ['checkin', 'checkout']) {
+    const idc = { app_visita_id: v.id, cab_IdATeG: p.cab_IdATeG || '', cab_NomePropriedade: p.cab_NomePropriedade || '' };
+    const colsId = [fx('app_visita_id', 'ID da visita (app)'), fx('cab_IdATeG', 'ID ATeG', 'Propriedade'), fx('cab_NomePropriedade', 'Nome da propriedade', 'Propriedade')];
+    /* visita */
+    const lv = { ...idc, app_situacao: v.status === 'finalizada' ? 'Finalizada' : 'Em andamento', app_tecnico: v.tecnico || '', app_criadaEm: dataHora(v.criadoEm), app_finalizadaEm: dataHora(v.finalizadaEm) };
+    const cv = [...colsId, fx('app_situacao', 'Situação'), fx('app_tecnico', 'Técnico'), fx('app_criadaEm', 'Criada em'), fx('app_finalizadaEm', 'Finalizada em')];
+    const propSem = F.propriedade.filter((f) => !['cab_IdATeG', 'cab_NomePropriedade'].includes(f.k));
+    linhaForm(lv, cv, 'Propriedade', '', propSem, {}, p, nomesFotos);
+    linhaForm(lv, cv, 'Visita', 'visita.', F.visita, {}, v.visita, nomesFotos);
+    for (const [tipo, n] of [['checkin', 'Check-in'], ['checkout', 'Check-out']]) {
       const pt = v[tipo] || {};
-      Object.assign(lin, { [tipo + '.em']: dataHora(pt.em, true), [tipo + '.lat']: pt.lat != null ? pt.lat.toFixed(6) : '', [tipo + '.lng']: pt.lng != null ? pt.lng.toFixed(6) : '',
-        [tipo + '.precisao']: pt.precisao != null ? pt.precisao : '', [tipo + '.geoErro']: pt.geoErro || '', [tipo + '.foto']: nomesFotos[pt.fotoId] || '' });
+      Object.assign(lv, { [tipo + '_em']: dataHora(pt.em, true), [tipo + '_lat']: pt.lat != null ? pt.lat.toFixed(6) : '', [tipo + '_lng']: pt.lng != null ? pt.lng.toFixed(6) : '',
+        [tipo + '_precisao']: pt.precisao != null ? Math.round(pt.precisao) : '', [tipo + '_erro']: pt.geoErro || '', [tipo + '_foto']: nomesFotos[pt.fotoId] || '' });
+      cv.push(fx(tipo + '_em', `${n} — data e hora`, n), fx(tipo + '_lat', `${n} — latitude`, n), fx(tipo + '_lng', `${n} — longitude`, n),
+        fx(tipo + '_precisao', `${n} — precisão (m)`, n), fx(tipo + '_erro', `${n} — problema de localização`, n), fx(tipo + '_foto', `${n} — arquivo da foto`, n));
     }
-    lin.duracao = v.checkin && v.checkout ? Math.round((new Date(v.checkout.em) - new Date(v.checkin.em)) / 60000) : '';
-    lV.push(lin);
-    v.domicilios.forEach((d) => { const l = { ...base, 'dom.id': d.id }; preencher(l, F.domicilio, 'd.', d, d, nomesFotos); lD.push(l); });
+    lv.app_duracao = v.checkin && v.checkout ? Math.round((new Date(v.checkout.em) - new Date(v.checkin.em)) / 60000) : '';
+    lv.app_qtdDom = v.domicilios.length; lv.app_qtdAss = v.assistidos.length;
+    cv.push(fx('app_duracao', 'Duração (min)'), fx('app_qtdDom', 'Domicílios'), fx('app_qtdAss', 'Assistidos'));
+    T.vis.push({ v: lv, cols: cv });
+    /* domicílios */
+    const doms = {};
+    v.domicilios.forEach((d) => {
+      const l = { ...idc, app_dom_id: d.id }; const c = [...colsId, fx('app_dom_id', 'ID do domicílio (app)')];
+      linhaForm(l, c, 'Domicílio (1001)', 'dom.', F.domicilio, {}, d, nomesFotos); T.dom.push({ v: l, cols: c }); doms[d.id] = { l, c };
+    });
+    /* assistidos: cadastro, perfil, acompanhamento e a linha completa */
+    if (!v.assistidos.length) T.tudo.push({ v: { ...lv }, cols: [...cv] });
     v.assistidos.forEach((a) => {
-      const ctx = { ...a.cadastro, ...a.perfil, ...a.acomp };
-      const b2 = { ...base, 'ass.id': a.id, 'ass.nome': a.cadastro.cab_NomeCompleto || '' };
-      const lc = { ...b2 }; preencher(lc, F.cadastro, 'c.', a.cadastro, ctx, nomesFotos, v); lA.push(lc);
-      const lp = { ...b2 }; preencher(lp, F.perfil, 'pf.', a.perfil, ctx, nomesFotos); lP.push(lp);
-      const la = { ...b2, 'ac.data': dataHora(v.checkin ? v.checkin.em : v.criadoEm) }; preencher(la, F.acomp, 'ac.', a.acomp, ctx, nomesFotos); lC.push(la);
+      const e = etapasAtendimento(a);
+      const id2 = { ...idc, app_ass_id: a.id, app_ass_nome: a.cadastro.cab_NomeCompleto || '' };
+      const c2 = [...colsId, fx('app_ass_id', 'ID do assistido (app)'), fx('app_ass_nome', 'Nome do assistido')];
+      const lc = { ...id2 }; const cc = [...c2];
+      linhaForm(lc, cc, 'Assistido (1002)', 'cad.', F.cadastro, {}, a.cadastro, nomesFotos, v);
+      lc['cad.cab_EtapasAtendimento'] = e.join(' | '); lc['cad.cab_CategoriaVisita'] = categoriaVisita(e);
+      cc.push({ k: 'cad.cab_EtapasAtendimento', l: 'Etapas do Atendimento', form: 'Assistido (1002)', nome: 'cab_EtapasAtendimento' },
+        { k: 'cad.cab_CategoriaVisita', l: 'Categoria da Visita', form: 'Assistido (1002)', nome: 'cab_CategoriaVisita' });
+      T.ass.push({ v: lc, cols: cc });
+      const lp = { ...id2 }; const cp = [...c2];
+      linhaForm(lp, cp, 'Perfil do Assistido (1008)', 'perfil.', F.perfil, basePerfil(a), a.perfil, nomesFotos);
+      T.perf.push({ v: lp, cols: cp });
+      const la = { ...id2, app_data: dataHora(v.checkin ? v.checkin.em : v.criadoEm) }; const ca = [...c2, fx('app_data', 'Data do atendimento')];
+      if (Object.keys(a.acomp).length) linhaForm(la, ca, 'Atendimento (1002)', 'acomp.', F.acomp, baseAcomp(a), a.acomp, nomesFotos);
+      T.acomp.push({ v: la, cols: ca });
+      const dm = doms[a.cadastro.cab_IdDomicilio];
+      const tudoV = { ...lv, ...(dm ? dm.l : {}), ...lc, ...lp, ...la };
+      const tudoC = [...cv, ...(dm ? dm.c.slice(colsId.length) : []), ...cc.slice(colsId.length), ...cp.slice(c2.length), ...ca.slice(colsId.length)];
+      T.tudo.push({ v: tudoV, cols: tudoC });
     });
   }
-  const cBase = [{ k: 'visita.id', l: 'ID da visita (app)' }, { k: 'ateg', l: 'ID ATeG' }, { k: 'propriedade', l: 'Propriedade' }];
-  const cAss = [...cBase, { k: 'ass.id', l: 'ID do assistido (app)' }, { k: 'ass.nome', l: 'Nome do assistido' }];
-  const cV = [...cBase, { k: 'status', l: 'Situação' }, { k: 'tecnico', l: 'Técnico' }, { k: 'criadoEm', l: 'Criada em' }, { k: 'finalizadaEm', l: 'Finalizada em' },
-    ...colunas(F.propriedade, 'p.').filter((c) => !['p.cab_IdATeG', 'p.cab_NomePropriedade'].includes(c.k)), ...colunas(F.visita, 'v.'),
-    ...colsPonto('checkin', 'Check-in'), ...colsPonto('checkout', 'Check-out'), { k: 'duracao', l: 'Duração (min)' }, { k: 'qtdDom', l: 'Domicílios' }, { k: 'qtdAss', l: 'Assistidos' }];
-  arqs.unshift(
-    { nome: 'planilhas/1_visitas.csv', dados: enc.encode(csv(lV, cV)) },
-    { nome: 'planilhas/2_domicilios.csv', dados: enc.encode(csv(lD, [...cBase, { k: 'dom.id', l: 'ID do domicílio (app)' }, ...colunas(F.domicilio, 'd.')])) },
-    { nome: 'planilhas/3_assistidos.csv', dados: enc.encode(csv(lA, [...cAss, ...colunas(F.cadastro, 'c.')])) },
-    { nome: 'planilhas/4_perfil_saude.csv', dados: enc.encode(csv(lP, [...cAss, ...colunas(F.perfil, 'pf.')])) },
-    { nome: 'planilhas/5_acompanhamento.csv', dados: enc.encode(csv(lC, [...cAss, { k: 'ac.data', l: 'Data do acompanhamento' }, ...colunas(F.acomp, 'ac.')])) },
-  );
+  const xlsx = await criarXlsx([
+    { nome: 'Tudo (1 linha por assistido)', m: matriz(T.tudo) },
+    { nome: 'Visitas', m: matriz(T.vis) },
+    { nome: 'Domicílios', m: matriz(T.dom) },
+    { nome: 'Assistidos', m: matriz(T.ass) },
+    { nome: 'Perfil de Saúde', m: matriz(T.perf) },
+    { nome: 'Acompanhamento', m: matriz(T.acomp) },
+  ]);
+  arqs.unshift({ nome: 'SDE_Contingencia_importacao.xlsx', dados: xlsx });
   const json = { app: 'SDE Contingência', formato: 1, versaoApp: VERSAO, geradoEm: new Date().toISOString(), tecnico: cfg.tecnico, visitas, fotos: fotosIdx };
-  arqs.unshift({ nome: 'dados.json', dados: enc.encode(JSON.stringify(json, null, 1)) });
+  arqs.splice(1, 0, { nome: 'dados.json', dados: enc.encode(JSON.stringify(json, null, 1)) });
   arqs.push({ nome: 'LEIA-ME.txt', dados: enc.encode(
     'Exportação do SDE Contingência\r\n\r\n' +
-    '- planilhas/: abra no Excel (separador ponto e vírgula). Uma linha por visita, domicílio, assistido, perfil de saúde e acompanhamento.\r\n' +
+    '- SDE_Contingencia_importacao.xlsx: todas as visitas deste arquivo numa só planilha Excel.\r\n' +
+    '  Aba "Tudo": uma linha por assistido, com propriedade, visita, check-in/out, domicílio, cadastro, perfil de saúde e acompanhamento.\r\n' +
+    '  As outras abas trazem os mesmos dados separados por formulário do SDE.\r\n' +
+    '  Linha 1 = formulário do SDE; linha 2 = pergunta como aparece no SDE; linha 3 = nome interno do campo (cab_..., ate_...). Os dados começam na linha 4.\r\n' +
+    '  Respostas de múltipla escolha vêm separadas por " | ". Só aparecem as perguntas que estavam visíveis para cada assistido.\r\n' +
     '- fotos/: check-in, check-out e termos, com data, hora e localização gravadas na imagem.\r\n' +
-    '- dados.json: cópia completa. Serve para restaurar em outro aparelho (Ajustes > Importar) e para lançar no SDE depois.\r\n\r\n' +
+    '- dados.json: cópia completa. Serve para restaurar em outro aparelho (Ajustes > Importar).\r\n\r\n' +
     'Contém dados pessoais e de saúde. Envie e guarde somente pelos canais autorizados pela coordenação.\r\n') });
   return criarZip(arqs);
 }

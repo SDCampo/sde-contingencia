@@ -107,3 +107,15 @@ details.grupo summary{cursor:pointer;font-weight:600;padding:6px 0;color:var(--t
 .pequeno{font-size:13px;color:var(--mudo)}
 .barra{height:8px;border-radius:99px;background:var(--fundo);overflow:hidden;border:1px solid var(--borda);margin:4px 0}
 .barra i{display:block;height:100%;background:var(--prim)}
+.radios{border:1px solid var(--borda);border-radius:10px;background:var(--sup)}
+.radios label{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--borda);cursor:pointer}
+.radios label:last-child{border-bottom:0}
+.radios input{width:22px;height:22px;accent-color:var(--prim);flex:none;margin:0}
+.radios.linha{display:flex;flex-wrap:wrap;gap:6px;border:0;background:none}
+.radios.linha label{border:1px solid var(--borda);border-radius:10px;background:var(--sup);padding:8px 12px;min-height:44px}
+.radios .dica,.lista+.dica{padding:6px 12px}
+.lista{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.linhaLista{display:flex;gap:6px;width:100%}
+.linhaLista input{flex:1}
+.campo.aviso{font-weight:600}
+.cada>.sec{border-top:1px dashed var(--borda)}
