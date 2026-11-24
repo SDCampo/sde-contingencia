@@ -1,7 +1,7 @@
 'use strict';
 /* SDE Contingência — registro offline de visitas quando o SDE Saúde no Campo está fora do ar.
    Os dados ficam só no aparelho (IndexedDB) e saem por exportação (ZIP com JSON, CSV e fotos). */
-const VERSAO = '1.2.1';
+const VERSAO = '1.2.2';
 
 /* ============ utilidades ============ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -102,7 +102,13 @@ const idadeDe = (o) => idade(o.cab_DataNascimento);
 /* Perfil de Saúde e Acompanhamento: campos, opções, condições e fórmulas vêm do SDE (sde_forms.js, gerado da configuração real). */
 const GATE_PERFIL = { k: 'cab_DesejaPreencherPerfil', l: 'Deseja preencher o perfil de saúde?', t: 'rad', o: ['Sim', 'Não'], linha: true, req: true };
 const PERFIL = [GATE_PERFIL, ...SDE_FORMS.perfil.map((f) => (f.t === 'calc' ? f : { ...f, se: (c) => c.cab_DesejaPreencherPerfil === 'Sim' && (!f.se || f.se(c)) }))];
-const ACOMP = SDE_FORMS.acomp;
+/* Sem "Acionamento de Teleconsulta" (não se aplica offline); o Breve Resumo do atendimento fica sempre visível. */
+const ACOMP = (() => {
+  const i = SDE_FORMS.acomp.findIndex((f) => f.t === 'titulo' && /Teleconsulta/.test(f.l));
+  if (i < 0) return SDE_FORMS.acomp;
+  const resumo = SDE_FORMS.acomp.slice(i).find((f) => f.k === 'ate_BreveResumo');
+  return [...SDE_FORMS.acomp.slice(0, i), ...(resumo ? [{ t: 'titulo', l: 'Breve Resumo' }, { ...resumo, se: null }] : [])];
+})();
 
 /* Campos. "k" usa o nome do campo no SDE (cab_…) quando existe, para facilitar o lançamento depois. */
 const F = {

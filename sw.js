@@ -4,7 +4,7 @@
    - Serve o app do cache primeiro: abre sem internet e não depende de servidor.
    - Versão nova só é aplicada quando o técnico toca em "Atualizar agora".
    Para publicar uma versão nova: altere VERSAO aqui e em app.js. */
-const VERSAO = '1.2.1';
+const VERSAO = '1.2.2';
 const CACHE = 'sde-contingencia-' + VERSAO;
 const ARQUIVOS = ['./', 'index.html', 'styles.css', 'sde_forms.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png'];
