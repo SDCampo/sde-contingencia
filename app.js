@@ -1,7 +1,7 @@
 'use strict';
 /* SDE Contingência — registro offline de visitas quando o SDE Saúde no Campo está fora do ar.
    Os dados ficam só no aparelho (IndexedDB) e saem por exportação (ZIP com JSON, CSV e fotos). */
-const VERSAO = '1.2.0';
+const VERSAO = '1.2.1';
 
 /* ============ utilidades ============ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -110,38 +110,11 @@ const F = {
     { t: 'titulo', l: 'Identificação da propriedade' },
     { k: 'cab_IdATeG', l: 'ID da propriedade (ATeG)', t: 'text', req: true, modo: 'numeric' },
     { k: 'cab_NomePropriedade', l: 'Nome da propriedade', t: 'text', req: true },
-    { k: 'cab_IdPropriedade', l: 'ID da propriedade no SDE (se souber)', t: 'text', modo: 'numeric' },
     { k: 'cab_Municipio', l: 'Município', t: 'text' },
     { k: 'cab_Estado', l: 'UF', t: 'sel', o: UFS },
     { k: 'cab_NomeProdutor', l: 'Nome do produtor', t: 'text' },
-    { k: 'cab_TelefoneProdutor', l: 'Telefone do produtor', t: 'tel' },
   ],
   visita: [
-    { t: 'titulo', l: 'Dados da visita' },
-    { k: 'cab_CategoriaVisita', l: 'Tipo de visita', t: 'sel', o: ['Visita acompanhada', 'Visita não acompanhada'], req: true },
-    { k: 'cab_QuantidadePessoasVisita', l: 'Pessoas presentes na visita', t: 'num' },
-    { k: 'cab_ProdutorResponsavelAtendido', l: 'O produtor responsável foi atendido?', t: 'sn' },
-    { t: 'titulo', l: 'Estrutura da propriedade' },
-    { k: 'cab_PropriedadePossuiDomicilio', l: 'A propriedade possui domicílio?', t: 'sn' },
-    { k: 'cab_QtdDomiciliosPropriedade', l: 'Quantidade de domicílios', t: 'num', se: (o) => o.cab_PropriedadePossuiDomicilio === 'Sim' },
-    { k: 'cab_QtdPessoasTrabalhamPropriedade', l: 'Pessoas que trabalham na propriedade', t: 'num' },
-    { k: 'cab_AtividadeProdutiva', l: 'Atividade produtiva principal', t: 'text', ph: 'Ex.: café, leite, hortaliças' },
-    { k: 'cab_PropriedadePossuiEnergia', l: 'Possui energia elétrica?', t: 'sn' },
-    { k: 'cab_PropriedadePossuiAcessoInternet', l: 'Possui acesso à internet?', t: 'sn' },
-    { t: 'titulo', l: 'Acesso e rede de saúde' },
-    { k: 'cab_TipoAcessoPropriedadeRural', l: 'Tipo de acesso', t: 'sel', o: ['Estrada asfaltada', 'Estrada de terra', 'Trilha', 'Fluvial', 'Outro'] },
-    { k: 'cab_GrauDificuldadeAcessoPropriedadeRural', l: 'Dificuldade de acesso', t: 'sel', o: ['Fácil', 'Moderada', 'Difícil'] },
-    { k: 'cab_NomeUBS', l: 'UBS de referência', t: 'text' },
-    { k: 'cab_DistanciaUBSPropriedade', l: 'Distância até a UBS (km)', t: 'num', dec: true },
-    { k: 'cab_DentroAreaAbrangeciaESF', l: 'Dentro da área de abrangência da ESF?', t: 'sel', o: SIM_NAO_NS },
-    { t: 'titulo', l: 'Análise de risco sanitário' },
-    { k: 'cab_PrincipalFonteAbastecimento', l: 'Principal fonte de água', t: 'sel', o: AGUA },
-    { k: 'cab_PrincipalDestinoLixoPropriedade', l: 'Principal destino do lixo', t: 'sel', o: LIXO },
-    { k: 'cab_AreasAlagadasBrejosAguaParada', l: 'Áreas alagadas, brejos ou água parada?', t: 'sn' },
-    { k: 'cab_EstruturasAbandonadas', l: 'Estruturas abandonadas?', t: 'sn' },
-    { k: 'cab_CercasEntreMoradiaCultivoAnimais', l: 'Há cercas entre moradia, cultivo e animais?', t: 'sn' },
-    { k: 'cab_RegistroZoonoses', l: 'Registro de zoonoses?', t: 'sn' },
-    { k: 'cab_PrincipaisRiscosAssociadosTrabalhoDiario', l: 'Principais riscos do trabalho', t: 'multi', o: RISCOS },
     { t: 'titulo', l: 'Encerramento' },
     { k: 'cab_BreveResumoVisita', l: 'Breve resumo da visita', t: 'area' },
     { k: 'cab_PrevisaoProximaVisitaData', l: 'Previsão da próxima visita', t: 'date' },
@@ -150,15 +123,8 @@ const F = {
   domicilio: [
     { k: 'cab_NomeDomicilio', l: 'Identificação do domicílio', t: 'text', req: true, ph: 'Ex.: Casa sede, Casa do caseiro' },
     { k: 'cab_NomeResponsavel', l: 'Responsável pelo domicílio', t: 'text' },
-    { k: 'cab_RelacaoResponsavelPropriedade', l: 'Relação do responsável com a propriedade', t: 'sel', o: ['Proprietário', 'Familiar do proprietário', 'Arrendatário', 'Funcionário', 'Outro'] },
-    { k: 'moradores', l: 'Número de moradores', t: 'num' },
-    { k: 'cab_PrincipalFonteAbastecimento', l: 'Fonte de água do domicílio', t: 'sel', o: AGUA },
-    { k: 'agua_tratamento', l: 'Tratamento da água para beber', t: 'sel', o: ['Filtrada', 'Fervida', 'Clorada', 'Mineral', 'Sem tratamento'] },
-    { k: 'cab_ExpostoFumaca', l: 'Moradores expostos a fumaça (fogão a lenha, queimadas)?', t: 'sn' },
-    { k: 'cab_ArmazenaMedicamentoAdequeadamente', l: 'Armazena medicamentos adequadamente?', t: 'sn' },
-    { k: 'agrotoxico_casa', l: 'Agrotóxicos guardados dentro ou perto da casa?', t: 'sn' },
-    { k: 'cab_ValidacaoDescarteLixoDistanciaSeguraDomi', l: 'Lixo descartado a distância segura do domicílio?', t: 'sn' },
-    { k: 'obs', l: 'Observações', t: 'area' },
+    { k: 'cab_IdATeG', l: 'ID ATeG / Saúde no Campo', t: 'text', modo: 'numeric' },
+    { k: 'cab_NomeProdutor', l: 'Nome do produtor', t: 'text' },
   ],
   cadastro: [
     { k: 'cab_NomeCompleto', l: 'Nome completo', t: 'text', req: true },
@@ -166,12 +132,10 @@ const F = {
     { k: 'cab_DataNascimento', l: 'Data de nascimento', t: 'date', req: true },
     { k: '_idade', l: 'Idade', t: 'calc', calc: (o) => { const i = idadeDe(o); return i == null ? '' : i + (i === 1 ? ' ano' : ' anos'); } },
     { k: 'cab_Sexo', l: 'Sexo', t: 'sel', o: ['Feminino', 'Masculino'], req: true },
-    { k: 'cab_Raca', l: 'Raça/cor', t: 'sel', o: ['Branca', 'Preta', 'Parda', 'Amarela', 'Indígena', 'Não declarada'] },
     { k: 'cab_CPF', l: 'CPF', t: 'text', modo: 'numeric' },
     { k: 'cns', l: 'Cartão Nacional de Saúde (CNS)', t: 'text', modo: 'numeric' },
-    { k: 'cab_NomeMae', l: 'Nome da mãe', t: 'text' },
     { k: 'cab_TelefonePessoal', l: 'Telefone', t: 'tel' },
-    { k: 'cab_IdDomicilio', l: 'Domicílio', t: 'sel', o: (vis) => ((vis || V || {}).domicilios || []).map((d) => ({ v: d.id, l: d.cab_NomeDomicilio || '(domicílio sem nome)' })) },
+    { k: 'cab_IdDomicilio', l: 'Domicílio', t: 'sel', req: true, o: (vis) => ((vis || V || {}).domicilios || []).map((d) => ({ v: d.id, l: d.cab_NomeDomicilio || '(domicílio sem nome)' })) },
     { k: 'vinculo', l: 'Vínculo com a propriedade', t: 'sel', o: ['Produtor responsável', 'Familiar', 'Funcionário', 'Familiar de funcionário', 'Outro'] },
     { k: 'cab_SabeLerEscrever', l: 'Sabe ler e escrever?', t: 'sn', se: (o) => { const i = idadeDe(o); return i == null || i >= 6; } },
     { k: 'cab_FrequentaEscolaCreche', l: 'Frequenta escola ou creche?', t: 'sn', se: (o) => { const i = idadeDe(o); return i != null && i < 18; } },
@@ -615,25 +579,33 @@ function telaVisita() {
       : el('p', { class: 'dica' }, 'Informe o ID e o nome da propriedade.'),
     el('div', { class: 'linhaBtns' }, el('button', { class: 'btn' + (propOk ? '' : ' prim'), onclick: () => ir(`#/v/${V.id}/prop`) }, propOk ? 'Ver / editar' : 'Preencher'))));
   t.append(blocoPonto('checkin', 2));
-  const doms = V.domicilios.map((d) => el('button', { class: 'item', onclick: () => ir(`#/v/${V.id}/dom/${d.id}`) },
-    el('div', { class: 'txt' }, el('strong', {}, d.cab_NomeDomicilio || '(domicílio sem nome)'),
-      el('small', {}, [d.cab_NomeResponsavel, d.moradores ? d.moradores + ' morador(es)' : null].filter(Boolean).join(' · ') || 'toque para preencher')), el('span', { class: 'seta' }, '›')));
-  t.append(card('Domicílios', 3, V.domicilios.length > 0, doms.length ? doms : el('p', { class: 'dica' }, 'Nenhum domicílio cadastrado.'),
-    el('button', { class: 'btn', disabled: bloqueada() || null, onclick: novoDomicilio }, '+ Adicionar domicílio')));
-  const ass = V.assistidos.map((a) => {
-    const s = situacaoAssistido(a); const i = idadeDe(a.cadastro); const dom = V.domicilios.find((d) => d.id === a.cadastro.cab_IdDomicilio);
-    return el('button', { class: 'item', onclick: () => ir(`#/v/${V.id}/ass/${a.id}`) },
+  /* Cada assistido aparece dentro do seu domicílio. */
+  const itemAss = (a) => {
+    const s = situacaoAssistido(a); const i = idadeDe(a.cadastro);
+    return el('button', { class: 'item sub', onclick: () => ir(`#/v/${V.id}/ass/${a.id}`) },
       el('div', { class: 'txt' }, el('strong', {}, nomeAssistido(a)),
-        el('small', {}, [i != null ? i + ' anos' : null, a.cadastro.cab_Sexo, dom ? dom.cab_NomeDomicilio : null].filter(Boolean).join(' · ') || 'toque para preencher'),
+        el('small', {}, [i != null ? i + ' anos' : null, a.cadastro.cab_Sexo].filter(Boolean).join(' · ') || 'toque para preencher'),
         el('div', { class: 'chips' }, el('span', { class: 'chip ' + (s.cad ? 'ok' : 'al') }, 'cadastro'), el('span', { class: 'chip ' + (s.perfil ? 'ok' : '') }, 'perfil de saúde'),
           el('span', { class: 'chip ' + (s.acomp ? 'ok' : '') }, 'acompanhamento'))), el('span', { class: 'seta' }, '›'));
+  };
+  const blocos = V.domicilios.map((d) => {
+    const membros = V.assistidos.filter((a) => a.cadastro.cab_IdDomicilio === d.id);
+    return el('div', { class: 'grupoDom' },
+      el('button', { class: 'item', onclick: () => ir(`#/v/${V.id}/dom/${d.id}`) },
+        el('div', { class: 'txt' }, el('strong', {}, '🏠 ' + (d.cab_NomeDomicilio || '(domicílio sem nome)')),
+          el('small', {}, [d.cab_NomeResponsavel ? 'Resp.: ' + d.cab_NomeResponsavel : null, membros.length + ' assistido(s)'].filter(Boolean).join(' · '))), el('span', { class: 'seta' }, '›')),
+      ...membros.map(itemAss),
+      el('button', { class: 'btn peq sub', disabled: bloqueada() || null, onclick: () => novoAssistido(d.id) }, '+ Assistido neste domicílio'));
   });
-  t.append(card('Assistidos', 4, V.assistidos.length > 0 && V.assistidos.every((a) => situacaoAssistido(a).cad), ass.length ? ass : el('p', { class: 'dica' }, 'Nenhum assistido cadastrado.'),
-    el('button', { class: 'btn', disabled: bloqueada() || null, onclick: novoAssistido }, '+ Adicionar assistido')));
-  const visOk = faltando(F.visita, V.visita).length === 0;
-  t.append(card('Dados da visita', 5, visOk, el('p', { class: 'dica' }, V.visita.cab_CategoriaVisita || 'Tipo de visita, estrutura, risco sanitário e resumo.'),
+  const soltos = V.assistidos.filter((a) => !V.domicilios.some((d) => d.id === a.cadastro.cab_IdDomicilio));
+  if (soltos.length) blocos.push(el('div', { class: 'grupoDom' }, el('p', { class: 'dica' }, 'Sem domicílio (abra o cadastro e escolha o domicílio):'), ...soltos.map(itemAss)));
+  const okDom = V.domicilios.length > 0 && V.assistidos.length > 0 && V.assistidos.every((a) => situacaoAssistido(a).cad) && !soltos.length;
+  t.append(card('Domicílios e assistidos', 3, okDom, blocos.length ? blocos : el('p', { class: 'dica' }, 'Cadastre o domicílio e depois os assistidos que moram nele.'),
+    el('button', { class: 'btn', disabled: bloqueada() || null, onclick: novoDomicilio }, '+ Adicionar domicílio')));
+  const visOk = !vazio(V.visita.cab_BreveResumoVisita);
+  t.append(card('Encerramento', 4, visOk, el('p', { class: 'dica' }, 'Breve resumo, previsão da próxima visita e horário previsto.'),
     el('div', { class: 'linhaBtns' }, el('button', { class: 'btn' + (visOk ? '' : ' prim'), onclick: () => ir(`#/v/${V.id}/visita`) }, visOk ? 'Ver / editar' : 'Preencher'))));
-  t.append(blocoPonto('checkout', 6));
+  t.append(blocoPonto('checkout', 5));
   if (!bloqueada()) t.append(el('button', { class: 'btn ok grande', onclick: finalizar }, 'Finalizar visita'));
   t.append(el('div', { class: 'linhaBtns', style: 'margin-top:24px' }, el('button', { class: 'btn perigo', onclick: excluirVisita }, 'Excluir visita')));
 }
@@ -668,12 +640,13 @@ function telaProp() {
   t.append(el('div', { class: 'card' }, f), rodapeConcluir('#/v/' + V.id));
 }
 function telaDadosVisita() {
-  cabecalho('Dados da visita', V.propriedade.cab_NomePropriedade || '', '#/v/' + V.id);
+  cabecalho('Encerramento', V.propriedade.cab_NomePropriedade || '', '#/v/' + V.id);
   const t = tela(); t.textContent = '';
   t.append(el('div', { class: 'card' }, formulario(F.visita, V.visita, () => V.visita, mudou)), rodapeConcluir('#/v/' + V.id));
 }
 function novoDomicilio() {
-  const d = { id: uid(), criadoEm: new Date().toISOString() };
+  const d = { id: uid(), criadoEm: new Date().toISOString(), cab_IdATeG: V.propriedade.cab_IdATeG, cab_NomeProdutor: V.propriedade.cab_NomeProdutor };
+  for (const k of ['cab_IdATeG', 'cab_NomeProdutor']) if (vazio(d[k])) delete d[k];
   V.domicilios.push(d); mudou(); ir(`#/v/${V.id}/dom/${d.id}`);
 }
 function telaDomicilio(did) {
@@ -681,7 +654,12 @@ function telaDomicilio(did) {
   if (!d) return ir('#/v/' + V.id);
   cabecalho('Domicílio', d.cab_NomeDomicilio || V.propriedade.cab_NomePropriedade || '', '#/v/' + V.id);
   const t = tela(); t.textContent = '';
+  const membros = V.assistidos.filter((a) => a.cadastro.cab_IdDomicilio === did);
   t.append(el('div', { class: 'card' }, formulario(F.domicilio, d, () => d, () => { mudou(); $('#subtitulo').textContent = d.cab_NomeDomicilio || ''; })),
+    el('div', { class: 'card' }, el('h3', { class: 'sec' }, 'Assistidos deste domicílio'),
+      membros.length ? membros.map((a) => el('button', { class: 'item', onclick: () => ir(`#/v/${V.id}/ass/${a.id}`) }, el('div', { class: 'txt' }, el('strong', {}, nomeAssistido(a))), el('span', { class: 'seta' }, '›')))
+        : el('p', { class: 'dica' }, 'Nenhum assistido neste domicílio.'),
+      el('button', { class: 'btn', disabled: bloqueada() || null, onclick: async () => { await salvarAgora(); novoAssistido(did); } }, '+ Adicionar assistido')),
     rodapeConcluir('#/v/' + V.id, bloqueada() ? null : el('button', { class: 'btn perigo', onclick: () => {
       const n = V.assistidos.filter((a) => a.cadastro.cab_IdDomicilio === did).length;
       if (!confirm(`Excluir este domicílio?${n ? `\n${n} assistido(s) ficarão sem domicílio.` : ''}`)) return;
@@ -690,9 +668,10 @@ function telaDomicilio(did) {
       mudou(); ir('#/v/' + V.id);
     } }, 'Excluir')));
 }
-function novoAssistido() {
+function novoAssistido(did) {
   const a = { id: uid(), criadoEm: new Date().toISOString(), cadastro: {}, perfil: {}, acomp: {} };
-  if (V.domicilios.length === 1) a.cadastro.cab_IdDomicilio = V.domicilios[0].id;
+  if (typeof did === 'string') a.cadastro.cab_IdDomicilio = did;
+  else if (V.domicilios.length === 1) a.cadastro.cab_IdDomicilio = V.domicilios[0].id;
   V.assistidos.push(a); mudou(); ir(`#/v/${V.id}/ass/${a.id}`);
 }
 function telaAssistido(aid, aba) {
@@ -732,7 +711,7 @@ async function finalizar() {
   if (!V.checkout) bloq.push('Check-out');
   if (bloq.length) return alert('Para finalizar, falta:\n\n• ' + bloq.join('\n• '));
   const av = [];
-  for (const x of faltando(F.visita, V.visita)) av.push('Dados da visita: ' + x);
+  for (const x of faltando(F.visita, V.visita)) av.push('Encerramento: ' + x);
   V.domicilios.forEach((d, i) => faltando(F.domicilio, d).forEach((x) => av.push(`Domicílio ${i + 1}: ${x}`)));
   V.assistidos.forEach((a) => {
     const n = nomeAssistido(a);

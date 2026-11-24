@@ -119,3 +119,5 @@ details.grupo summary{cursor:pointer;font-weight:600;padding:6px 0;color:var(--t
 .linhaLista input{flex:1}
 .campo.aviso{font-weight:600}
 .cada>.sec{border-top:1px dashed var(--borda)}
+.grupoDom{margin:0 0 12px}
+.item.sub,.btn.sub{margin-left:18px;width:calc(100% - 18px)}
